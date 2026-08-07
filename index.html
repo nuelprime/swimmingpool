@@ -187,11 +187,9 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
     background:#fff !important;border:2px solid var(--edge);border-radius:14px;padding:12px}
   tbody tr:hover{background:#fff}
   td{display:block;border:none !important;padding:0;text-align:left;white-space:normal}
-  td:first-child{grid-column:1/3;padding-left:0}
-  td[data-l="age"]{grid-column:3;text-align:right;color:var(--dim)}
+  td:first-child{grid-column:1/4;padding-left:0}
   td[data-l]::before{content:attr(data-l);display:block;font-size:9px;color:var(--faint);
     text-transform:uppercase;letter-spacing:.08em;font-weight:700}
-  td[data-l="age"]::before{display:none}
   td:nth-last-child(3){grid-column:1/4}   /* x handle */
   td:nth-last-child(2){grid-column:1/3}   /* dev */
   td:nth-last-child(1){grid-column:3;text-align:right} /* ca */
@@ -223,6 +221,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <label class="f">mcap ≥ <input type="number" min="0" id="fMc" placeholder="0"> <span class="u">$</span></label>
   <label class="f">age ≤ <input type="number" min="0" id="fAge" placeholder="∞"> <span class="u">h</span></label>
   <label class="f">holders ≥ <input type="number" min="0" id="fHold" placeholder="0"></label>
+  <label class="f">vol24 ≥ <input type="number" min="0" id="fVol" placeholder="0"> <span class="u">$</span></label>
   <label class="f"><input type="checkbox" id="fXV"> 𝕏 connected</label>
   <label class="f"><input type="checkbox" id="fSer"> hide serial devs</label>
   <button class="reset" id="reset">drain filters</button>
@@ -321,10 +320,11 @@ async function load(){
 /* ================= filters ================= */
 function passes(l){
   const v = id => { const el=$(id); let x=parseFloat(el.value); if(isNaN(x)) return null; if(x<0){x=0; el.value='';} return x; };
-  const mc=v('fMc'), age=v('fAge'), hold=v('fHold');
+  const mc=v('fMc'), age=v('fAge'), hold=v('fHold'), vol=v('fVol');
   if (mc!=null && !(l.fdvUsd>=mc)) return false;
   if (age!=null && !(l.createdAt && ageMs(l.createdAt)<=age*36e5)) return false;
   if (hold!=null && !((l.holderCount??0)>=hold)) return false;
+  if (vol!=null && !((l._vol??0)>=vol)) return false;
   if ($('fXV').checked && !xOf(l.xUrl)) return false;
   if ($('fSer').checked && (feed._serial.get((l.creatorAddress||'').toLowerCase())||0)>1) return false;
   return true;
@@ -332,8 +332,8 @@ function passes(l){
 
 /* ================= render ================== */
 const COLS = [
-  ['token','token'],['createdAt','age'],['fdvUsd','mcap'],['_vol','vol24'],
-  ['_vl','v/l'],['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
+  ['token','token'],['fdvUsd','mcap'],['_vol','vol24'],
+  ['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
   ['x','𝕏'],['creator','dev'],['ca','ca'],
 ];
 function header(){
@@ -354,20 +354,17 @@ function render(){
   });
 
   $('pool').style.display = 'none';
-  if (!list.length){ $('rows').innerHTML = `<tr><td colspan="11" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
+  if (!list.length){ $('rows').innerHTML = `<tr><td colspan="9" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
   $('rows').innerHTML = list.map(l=>{
     const serial = feed._serial?.get((l.creatorAddress||'').toLowerCase())||0;
     const xh = xOf(l.xUrl);
     const fb = `<span class=em style=&quot;background:hsl(${(l.imageHue??200)},65%,85%)&quot;>${esc((l.tokenSymbol||'?').slice(0,2))}</span>`.replace(/&quot;/g,'\'');
     const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
-    const vl = l._vl==null?'<span class=dimc>—</span>': l._vl>=8?`<span class="pill wash">${l._vl.toFixed(1)}x</span>`:`${l._vl.toFixed(1)}x`;
     return `<tr data-ca="${esc(l.tokenAddress)}">
-      <td><div class=tk>${img}<div><div class=sym>${esc(l.tokenSymbol)}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc(l.tokenName||'')}</div></div></div></td>
-      <td data-l="age">${ageStr(l.createdAt)}</td>
+      <td><div class=tk>${img}<div><div class=sym>${esc(l.tokenSymbol)}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc(l.tokenName||'')} · ${ageStr(l.createdAt)}</div></div></div></td>
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
-      <td data-l="v/l">${vl}</td>
       <td data-l="24h">${pct(l._c24)}</td>
       <td data-l="hold">${num(l.holderCount)}</td>
       <td data-l="buy1h">${num(l.buyersLast1h)}</td>
