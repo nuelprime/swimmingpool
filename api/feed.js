@@ -70,12 +70,41 @@ export default async function handler(req, res) {
 
     const auctions = (auc.status === 'fulfilled' && Array.isArray(auc.value)) ? auc.value : [];
 
+    const ensMap = new Map();
     const payload = {
       at: Date.now(),
       launches: [...launches.values()],
       auctions,
       degraded: [vol, rec, auc].some(s => s.status === 'rejected'),
     };
+
+    // lazy ENS for creators: Redis-memoized, max 15 fresh lookups per refresh
+    if (R_URL && R_TOK) {
+      const creators = [...new Set(payload.launches.map(l => (l.creatorAddress||'').toLowerCase()).filter(Boolean))];
+      if (creators.length) {
+        const memo = await redis(['MGET', ...creators.map(c => `ens:v1:${c}`)]);
+        const unknown = [];
+        creators.forEach((c, i) => {
+          const hit = Array.isArray(memo) ? memo[i] : null;
+          if (hit !== null && hit !== undefined) { if (hit) ensMap.set(c, hit); }
+          else unknown.push(c);
+        });
+        const fresh = unknown.slice(0, 15);
+        await Promise.all(fresh.map(async c => {
+          try {
+            const r = await fetch(`https://api.ensideas.com/ens/resolve/${c}`, { signal: AbortSignal.timeout(4000) });
+            const j = await r.json();
+            const name = (j && j.name) ? String(j.name) : '';
+            if (name) ensMap.set(c, name);
+            await redis(['SET', `ens:v1:${c}`, name, 'EX', String(30*86400)]);
+          } catch {}
+        }));
+        for (const l of payload.launches) {
+          const n = ensMap.get((l.creatorAddress||'').toLowerCase());
+          if (n) l.creatorEns = n;
+        }
+      }
+    }
 
     // cache + accumulate seen-index (fire and forget-ish)
     if (R_URL && R_TOK) {
