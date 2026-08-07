@@ -55,10 +55,7 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 .lanes{display:flex;gap:10px;padding:14px 20px 0;flex-wrap:wrap;align-items:flex-end}
 .lane{display:flex;align-items:center;gap:9px;background:#fff;border:2px solid var(--edge);border-bottom:none;
   border-radius:12px 12px 0 0;padding:9px 16px 11px;color:var(--dim);box-shadow:inset 0 -3px 0 var(--grout)}
-.lane .n{font-family:var(--disp);width:22px;height:22px;border-radius:50%;background:var(--tile2);border:2px solid var(--edge);
-  display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--dim)}
 .lane.on{color:var(--ink);border-color:var(--water2);box-shadow:inset 0 -3px 0 var(--water1)}
-.lane.on .n{background:var(--water2);border-color:var(--water2);color:#fff}
 .search{margin-left:auto;display:flex;align-items:center;padding-bottom:8px}
 .search input{background:#fff;border:2px solid var(--edge);border-radius:20px;padding:8px 16px;width:300px;max-width:74vw;
   font:inherit;color:var(--ink);outline:none}
@@ -76,8 +73,6 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 .f .u{color:var(--faint)}
 .reset{color:var(--faint);font-size:11px;padding:4px 8px;border-radius:8px}
 .reset:hover{color:var(--red);background:var(--redbg)}
-.count{margin-left:auto;color:var(--dim);font-size:11px}
-.count b{color:var(--ink);font-family:var(--disp);font-size:14px}
 
 /* ---------- table on tile ---------- */
 .wrap{overflow-x:auto;padding:14px 12px 4px}
@@ -164,7 +159,35 @@ tbody tr:last-child td{border-bottom:none}
 .note{color:var(--faint);font-size:10px;margin-top:6px}
 footer{padding:16px 20px 26px;color:var(--dim);font-size:10.5px;display:flex;gap:14px;flex-wrap:wrap}
 footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
-@media(max-width:640px){ .search{margin-left:0;width:100%} .search input{width:100%} .kv{grid-template-columns:1fr 1fr} h1{font-size:24px} }
+.ftoggle{display:none}
+@media(max-width:640px){
+  .search{margin-left:0;width:100%} .search input{width:100%}
+  .kv{grid-template-columns:1fr 1fr} h1{font-size:24px}
+  /* collapsed filter deck behind toggle */
+  .ftoggle{display:block;margin:10px 16px 0;background:#fff;border:2px solid var(--edge);border-radius:20px;
+    padding:8px 16px;font:inherit;color:var(--dim);font-weight:700;width:calc(100% - 32px);text-align:left}
+  body:not(.fopen) .deck{display:none}
+  .deck{border-top:none}
+  /* table → cards */
+  .wrap{padding:10px 12px 4px;overflow-x:hidden}
+  table{min-width:0;display:block;border:none;background:none;overflow:visible}
+  thead{display:none}
+  tbody{display:flex;flex-direction:column;gap:10px}
+  tbody tr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 10px;align-items:center;
+    background:#fff !important;border:2px solid var(--edge);border-radius:14px;padding:12px}
+  tbody tr:hover{background:#fff}
+  td{display:block;border:none !important;padding:0;text-align:left;white-space:normal}
+  td:first-child{grid-column:1/3;padding-left:0}
+  td[data-l="age"]{grid-column:3;text-align:right;color:var(--dim)}
+  td[data-l]::before{content:attr(data-l);display:block;font-size:9px;color:var(--faint);
+    text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  td[data-l="age"]::before{display:none}
+  td:nth-last-child(3){grid-column:1/4}   /* x handle */
+  td:nth-last-child(2){grid-column:1/3}   /* dev */
+  td:nth-last-child(1){grid-column:3;text-align:right} /* ca */
+  td:nth-last-child(-n+3)::before{display:none}
+  td:nth-last-child(2)::before,td:nth-last-child(1)::before{display:none}
+}
 </style>
 </head>
 <body>
@@ -179,12 +202,13 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 </div>
 
 <div class="lanes">
-  <button class="lane on" data-tab="new"><span class="n">1</span>NEW PAIRS</button>
-  <button class="lane" data-tab="top"><span class="n">2</span>TOP</button>
-  <button class="lane" data-tab="auction"><span class="n">3</span>AUCTIONS</button>
+  <button class="lane on" data-tab="new">NEW PAIRS</button>
+  <button class="lane" data-tab="top">TOP</button>
+  <button class="lane" data-tab="auction">AUCTIONS</button>
   <div class="search"><input id="q" placeholder="CA · dev wallet · @xhandle" spellcheck="false"></div>
 </div>
 
+<button class="ftoggle" id="ftoggle">filters ▾</button>
 <div class="deck" id="filters">
   <label class="f">liq ≥ <input type="number" min="0" id="fLiq" placeholder="0"> <span class="u">$</span></label>
   <label class="f">age ≤ <input type="number" min="0" id="fAge" placeholder="∞"> <span class="u">h</span></label>
@@ -194,8 +218,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <label class="f"><input type="checkbox" id="fXV"> 𝕏 verified</label>
   <label class="f"><input type="checkbox" id="fSer"> hide serial devs</label>
   <button class="reset" id="reset">drain filters</button>
-  <span class="count"><b id="nShow">0</b> in the pool</span>
-</div>
+  </div>
 
 <div class="wrap"><table>
   <thead><tr id="thead"></tr></thead>
@@ -314,7 +337,6 @@ function render(){
   header();
   const src = tab==='auction' ? feed.auctions.map(fromAuction) : feed.launches.slice();
   let list = src.filter(passes);
-  $('nShow').textContent = list.length;
   list.sort((a,b)=>{
     let A=sortVal(a,sort.k), B=sortVal(b,sort.k);
     if (typeof A==='string' || typeof B==='string'){ A=String(A??''); B=String(B??''); return A.localeCompare(B)*-sort.d; }
@@ -331,15 +353,15 @@ function render(){
     const vl = l._vl==null?'<span class=dimc>—</span>': l._vl>=8?`<span class="pill wash">${l._vl.toFixed(1)}x</span>`:`${l._vl.toFixed(1)}x`;
     return `<tr data-ca="${esc(l.tokenAddress)}">
       <td><div class=tk>${img}<div><div class=sym>${esc(l.tokenSymbol)}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc(l.tokenName||'')}</div></div></div></td>
-      <td>${ageStr(l.createdAt)}</td>
-      <td>${usd(l.fdvUsd)}</td>
-      <td>${usd(l._liq)}</td>
-      <td>${usd(l._vol)}</td>
-      <td>${vl}</td>
-      <td>${pct(l._c1)}</td>
-      <td>${pct(l._c24)}</td>
-      <td>${num(l.holderCount)}</td>
-      <td>${num(l.buyersLast1h)}</td>
+      <td data-l="age">${ageStr(l.createdAt)}</td>
+      <td data-l="fdv">${usd(l.fdvUsd)}</td>
+      <td data-l="liq">${usd(l._liq)}</td>
+      <td data-l="vol24">${usd(l._vol)}</td>
+      <td data-l="v/l">${vl}</td>
+      <td data-l="1h">${pct(l._c1)}</td>
+      <td data-l="24h">${pct(l._c24)}</td>
+      <td data-l="hold">${num(l.holderCount)}</td>
+      <td data-l="buy1h">${num(l.buyersLast1h)}</td>
       <td>${xh?`<a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="${l.xVerified?'vx':''}">@${esc(xh)}</a>`:'<span class=dimc>—</span>'}</td>
       <td><span class=addr data-dev="${esc(l.creatorAddress||'')}">${short(l.creatorAddress)}</span>${serial>1?`<span class=serial title="launches by this wallet in current index">×${serial}</span>`:''}</td>
       <td><span class=addr>${short(l.tokenAddress)}</span><button class=copy data-cp="${esc(l.tokenAddress)}" title="copy CA">⧉</button></td>
@@ -458,6 +480,10 @@ document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   render();
 });
 $('filters').addEventListener('input', render);
+$('ftoggle').onclick = () => {
+  const open = document.body.classList.toggle('fopen');
+  $('ftoggle').textContent = open ? 'filters ▴' : 'filters ▾';
+};
 $('reset').onclick=()=>{ $('filters').querySelectorAll('input').forEach(i=>i.type==='checkbox'?i.checked=false:i.value=''); render(); };
 $('q').addEventListener('keydown', e=>{
   if(e.key!=='Enter') return;
