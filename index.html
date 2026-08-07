@@ -213,7 +213,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <label class="f">mcap ≥ <input type="number" min="0" id="fMc" placeholder="0"> <span class="u">$</span></label>
   <label class="f">age ≤ <input type="number" min="0" id="fAge" placeholder="∞"> <span class="u">h</span></label>
   <label class="f">holders ≥ <input type="number" min="0" id="fHold" placeholder="0"></label>
-  <label class="f"><input type="checkbox" id="fXV"> 𝕏 verified</label>
+  <label class="f"><input type="checkbox" id="fXV"> 𝕏 connected</label>
   <label class="f"><input type="checkbox" id="fSer"> hide serial devs</label>
   <button class="reset" id="reset">drain filters</button>
   </div>
@@ -311,7 +311,7 @@ function passes(l){
   if (mc!=null && !(l.fdvUsd>=mc)) return false;
   if (age!=null && !(l.createdAt && ageMs(l.createdAt)<=age*36e5)) return false;
   if (hold!=null && !((l.holderCount??0)>=hold)) return false;
-  if ($('fXV').checked && !l.xVerified) return false;
+  if ($('fXV').checked && !xOf(l.xUrl)) return false;
   if ($('fSer').checked && (feed._serial.get((l.creatorAddress||'').toLowerCase())||0)>1) return false;
   return true;
 }
