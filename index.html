@@ -7,6 +7,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SWIMMINGPOOL — pools.trade, filtered</title>
+<meta name="description" content="Every launch on pools.trade — filtered, flagged, rap-sheeted. NO DIVING · NO RUNNING.">
+<meta property="og:title" content="SWIMMINGPOOL.lol">
+<meta property="og:description" content="pools.trade, filtered. Serial-dev rap sheets · wash flags · new pairs.">
+<meta property="og:image" content="https://swimmingpool.lol/og.png">
+<meta property="og:url" content="https://swimmingpool.lol">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://swimmingpool.lol/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -90,6 +97,7 @@ tbody tr:last-child td{border-bottom:none}
 .tk{display:flex;align-items:center;gap:9px;text-align:left}
 .tk img,.tk .em{width:38px;height:38px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;
   font-size:22px;background:var(--tile2);border:1.5px solid var(--edge);object-fit:cover}
+.tk .em{font-family:var(--disp);font-size:13px;color:var(--ink)}
 .tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em}
 .tk .nm{color:var(--faint);font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis}
 .up{color:var(--green);font-weight:700} .down{color:var(--red);font-weight:700} .dimc{color:var(--faint)}
@@ -297,7 +305,10 @@ async function load(){
     }
     feed.launches.forEach(derive);
     feed._serial = serialMap(feed.launches);
-    if (firstPaint){ firstPaint=false; setTimeout(render, Math.max(0, SHOW_MS-(Date.now()-t0))); }
+    if (firstPaint){ firstPaint=false; setTimeout(()=>{ render();
+      const u=new URL(location); const ca=u.searchParams.get('ca'), dev=u.searchParams.get('dev');
+      if (ca && /^0x[0-9a-fA-F]{40}$/.test(ca)) openToken(ca); else if (dev) openCreator(dev);
+    }, Math.max(0, SHOW_MS-(Date.now()-t0))); }
     else render();
   }catch(e){
     $('poolmsg').textContent = `feed error: ${e.message}`;
@@ -318,8 +329,8 @@ function passes(l){
 
 /* ================= render ================== */
 const COLS = [
-  ['token','token'],['createdAt','age'],['fdvUsd','fdv'],['_liq','liq'],['_vol','vol24'],
-  ['_vl','v/l'],['_c1','1h'],['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
+  ['token','token'],['createdAt','age'],['fdvUsd','mcap'],['_vol','vol24'],
+  ['_vl','v/l'],['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
   ['x','𝕏'],['creator','dev'],['ca','ca'],
 ];
 function header(){
@@ -340,21 +351,20 @@ function render(){
   });
 
   $('pool').style.display = 'none';
-  if (!list.length){ $('rows').innerHTML = `<tr><td colspan="13" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
+  if (!list.length){ $('rows').innerHTML = `<tr><td colspan="11" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
   $('rows').innerHTML = list.map(l=>{
     const serial = feed._serial?.get((l.creatorAddress||'').toLowerCase())||0;
     const xh = xOf(l.xUrl);
-    const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" onerror="this.outerHTML='<span class=em>${esc(l.imageEmoji||'🐸')}</span>'">` : `<span class="em">${esc(l.imageEmoji||'🐸')}</span>`;
+    const fb = `<span class=em style=&quot;background:hsl(${(l.imageHue??200)},65%,85%)&quot;>${esc((l.tokenSymbol||'?').slice(0,2))}</span>`.replace(/&quot;/g,'\'');
+    const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
     const vl = l._vl==null?'<span class=dimc>—</span>': l._vl>=8?`<span class="pill wash">${l._vl.toFixed(1)}x</span>`:`${l._vl.toFixed(1)}x`;
     return `<tr data-ca="${esc(l.tokenAddress)}">
       <td><div class=tk>${img}<div><div class=sym>${esc(l.tokenSymbol)}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc(l.tokenName||'')}</div></div></div></td>
       <td data-l="age">${ageStr(l.createdAt)}</td>
-      <td data-l="fdv">${usd(l.fdvUsd)}</td>
-      <td data-l="liq">${usd(l._liq)}</td>
+      <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="v/l">${vl}</td>
-      <td data-l="1h">${pct(l._c1)}</td>
       <td data-l="24h">${pct(l._c24)}</td>
       <td data-l="hold">${num(l.holderCount)}</td>
       <td data-l="buy1h">${num(l.buyersLast1h)}</td>
@@ -374,7 +384,7 @@ function render(){
 const MINI_POOL = `<div class="lanebox" style="width:100%;height:76px;margin-top:6px"><div class="ca"></div><div class="surface"></div><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="bub"></div><div class="bub b2"></div><div class="bub b3"></div><div class="bub b4"></div></div>`;
 
 function drawer(html){ $('drawer').innerHTML = html; $('drawer').classList.add('open'); $('ovl').classList.add('open'); }
-function closeDrawer(){ $('drawer').classList.remove('open'); $('ovl').classList.remove('open'); }
+function closeDrawer(){ $('drawer').classList.remove('open'); $('ovl').classList.remove('open'); setParam(null,null); }
 $('ovl').onclick = closeDrawer;
 
 function sparkline(cv, series){
@@ -391,7 +401,9 @@ function sparkline(cv, series){
   c.stroke();
 }
 
+function setParam(k,val){ const u=new URL(location); ['ca','dev'].forEach(x=>u.searchParams.delete(x)); if(val) u.searchParams.set(k,val); history.replaceState(null,'',u); }
 async function openToken(ca){
+  setParam('ca',ca);
   const local = feed.launches.find(l=>l.tokenAddress===ca) || feed.auctions.map(fromAuction).find(l=>l.tokenAddress===ca);
   drawer(tokenHTML(local, null));
   if (local?.poolPriceSeries?.length) sparkline($('spark'), local.poolPriceSeries);
@@ -419,7 +431,7 @@ function tokenHTML(l, cr){
     l.status?`<span class=badge>${esc(l.status)}</span>`:'',
     l.launchpadId?`<span class=badge>${esc(l.launchpadId)}</span>`:'',
   ].join('');
-  const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}">` : `<span class=em>${esc(l.imageEmoji||'🐸')}</span>`;
+  const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}">` : `<span class=em style="background:hsl(${(l.imageHue??200)},65%,85%)">${esc((l.tokenSymbol||'?').slice(0,2))}</span>`;
   const rapW = cr?.byWallet?.filter(r=>r.tokenAddress!==l.tokenAddress) ?? null;
   const rapX = cr?.byX ?? null;
   const others = cr?.otherWallets ?? [];
@@ -456,6 +468,7 @@ function rapRow(r){
 
 async function openCreator(q){
   if(!q) return;
+  setParam('dev',q);
   drawer(`<div class=card><div class=dhead><h2>dev ${esc(short(q))}</h2><button class=x onclick="closeDrawer()">✕</button></div>${MINI_POOL}</div>`);
   try{
     const j = DEMO ? MOCK_CREATOR(q) : await (await fetch(`${API}/creator?q=${encodeURIComponent(q)}`)).json();
