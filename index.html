@@ -210,11 +210,9 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 
 <button class="ftoggle" id="ftoggle">filters ▾</button>
 <div class="deck" id="filters">
-  <label class="f">liq ≥ <input type="number" min="0" id="fLiq" placeholder="0"> <span class="u">$</span></label>
+  <label class="f">mcap ≥ <input type="number" min="0" id="fMc" placeholder="0"> <span class="u">$</span></label>
   <label class="f">age ≤ <input type="number" min="0" id="fAge" placeholder="∞"> <span class="u">h</span></label>
-  <label class="f">buyers1h ≥ <input type="number" min="0" id="fBuy" placeholder="0"></label>
-  <label class="f">V/L ≤ <input type="number" min="0" id="fVL" placeholder="∞" step="0.5"> <span class="u">wash</span></label>
-  <label class="f">hold/$kFDV ≥ <input type="number" min="0" id="fHF" placeholder="0" step="0.1"></label>
+  <label class="f">holders ≥ <input type="number" min="0" id="fHold" placeholder="0"></label>
   <label class="f"><input type="checkbox" id="fXV"> 𝕏 verified</label>
   <label class="f"><input type="checkbox" id="fSer"> hide serial devs</label>
   <button class="reset" id="reset">drain filters</button>
@@ -309,12 +307,10 @@ async function load(){
 /* ================= filters ================= */
 function passes(l){
   const v = id => { const el=$(id); let x=parseFloat(el.value); if(isNaN(x)) return null; if(x<0){x=0; el.value='';} return x; };
-  const liq=v('fLiq'), age=v('fAge'), buy=v('fBuy'), vl=v('fVL'), hf=v('fHF');
-  if (liq!=null && !(l._liq>=liq)) return false;
+  const mc=v('fMc'), age=v('fAge'), hold=v('fHold');
+  if (mc!=null && !(l.fdvUsd>=mc)) return false;
   if (age!=null && !(l.createdAt && ageMs(l.createdAt)<=age*36e5)) return false;
-  if (buy!=null && !((l.buyersLast1h??0)>=buy)) return false;
-  if (vl!=null && l._vl!=null && l._vl>vl) return false;
-  if (hf!=null && !((l._hf??0)>=hf)) return false;
+  if (hold!=null && !((l.holderCount??0)>=hold)) return false;
   if ($('fXV').checked && !l.xVerified) return false;
   if ($('fSer').checked && (feed._serial.get((l.creatorAddress||'').toLowerCase())||0)>1) return false;
   return true;
