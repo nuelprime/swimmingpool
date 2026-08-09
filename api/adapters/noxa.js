@@ -1,0 +1,91 @@
+// noxa adapter → canonical rows. Robinhood Chain via indexer.noxa.io (/v1/robinhood/*).
+// Values come in native-token (ETH-equivalent) units → convert to USD via ethUsd().
+import { ethUsd, xHandle, valid } from './_shape.js';
+
+const BASE = 'https://indexer.noxa.io/v1/robinhood';
+const IMG = 'https://indexer.noxa.io'; // logo paths are relative: /uploads/…
+
+async function j(path) {
+  const r = await fetch(BASE + path, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(9000) });
+  if (!r.ok) throw new Error(`noxa ${path} ${r.status}`);
+  return r.json();
+}
+
+function norm(t, px) {
+  if (!t?.address) return null;
+  const mc = t.marketCapEth != null ? t.marketCapEth * px : null;
+  const vol = t.volume24hEth != null ? t.volume24hEth * px : null;
+  return {
+    ca: t.address,
+    sym: t.symbol,
+    name: t.name,
+    launchpad: 'noxa',
+    creator: t.creator || null,
+    x: xHandle(t.twitter),
+    telegram: t.telegram || null,
+    website: t.website || null,
+    mcapUsd: mc,
+    volUsd: vol,
+    liqUsd: null,                        // noxa doesn't expose pool liq directly in list; drawer can derive
+    change24h: null,                     // not in list payload; OHLC gives it on the token page
+    holders: null,                       // fetched lazily on token page
+    createdAt: t.createdAtTime ?? null,  // already ms epoch
+    status: t.restrictionsEndBlock ? 'restricted' : 'live',
+    imageUrl: t.logo ? (t.logo.startsWith('http') ? t.logo : IMG + t.logo) : null,
+    imageEmoji: null,
+    imageHue: null,
+    spark: null,
+    description: t.description || null,
+    _pool: t.officialPool || null,
+  };
+}
+
+export async function fetchFeed() {
+  const px = await ethUsd();
+  // newest + trending, merged. Each caps reasonably; pagination available if we want depth later.
+  const [nw, tr] = await Promise.allSettled([
+    j('/tokens/newest?limit=100'),
+    j('/tokens/trending?limit=100'),
+  ]);
+  const out = new Map();
+  for (const s of [nw, tr]) {
+    if (s.status !== 'fulfilled') continue;
+    const arr = s.value?.tokens || s.value || [];
+    for (const t of arr) { const r = norm(t, px); if (valid(r)) out.set(r.ca.toLowerCase(), r); }
+  }
+  if (!out.size) throw new Error('noxa: empty');
+  return [...out.values()];
+}
+
+export async function fetchToken(ca) {
+  const px = await ethUsd();
+  const t = await j(`/token/${ca}`);
+  const row = norm(t, px);
+  if (!row) return null;
+  // enrich: holders count
+  try {
+    const h = await j(`/token/${ca}/holders?limit=1`);
+    row.holders = h?.pagination?.total ?? null;
+  } catch {}
+  return row;
+}
+
+export async function fetchByCreator(wallet) {
+  // noxa has no direct "by creator" list; use search-less scan is impractical.
+  // The seen-index in feed.js covers cross-adapter creator lookups instead.
+  return [];
+}
+
+// chart data — the thing pools.trade never gave us
+export async function fetchOhlc(ca) {
+  try { return await j(`/token/${ca}/ohlc?limit=500`); } catch { return []; }
+}
+export async function fetchSwaps(ca) {
+  try { const s = await j(`/token/${ca}/swaps?limit=50`); return s?.swaps || []; } catch { return []; }
+}
+// dev forensics, native — buy/sell history for any wallet
+export async function fetchWalletSwaps(wallet) {
+  try { const s = await j(`/accounts/${wallet}/swaps?limit=100`); return s?.swaps || []; } catch { return []; }
+}
+
+export const id = 'noxa';

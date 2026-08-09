@@ -158,7 +158,7 @@ tbody tr:last-child td{border-bottom:none}
 .kv div{background:var(--tile);border:1.5px solid var(--edge);border-radius:10px;padding:8px 10px}
 .kv b{display:block;font-size:14px;font-family:var(--disp);font-weight:400}
 .kv span{font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
-.spark{width:100%;height:76px;background:linear-gradient(180deg,#eaf8fd,#dcf2fa);border:1.5px solid var(--edge);border-radius:10px;margin-top:10px}
+.spark{width:100%;height:150px;background:linear-gradient(180deg,#eaf8fd,#dcf2fa);border:1.5px solid var(--edge);border-radius:10px;margin-top:10px}
 .meta{font-size:11px;color:var(--dim);margin-top:10px;word-break:break-all}
 .sec{font-family:var(--disp);color:var(--ink);font-size:13px;letter-spacing:.03em;margin:2px 0 8px}
 .rap{display:flex;flex-direction:column;gap:6px}
@@ -273,7 +273,19 @@ const ageStr = t => { if(!t) return '—'; const m=ageMs(t)/6e4; return m<60?m.t
 const xOf = u => { const m=String(u||'').match(/(?:x|twitter)\.com\/(@?[A-Za-z0-9_]{1,15})/i); return m?m[1].replace('@',''):null; };
 const copy = (t,ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(t); };
 
+// map canonical API row (ca/sym/mcapUsd/volUsd/creator/x/…) → fields the UI already uses
+function adapt(r){
+  if (r && r.ca && r.tokenAddress===undefined){
+    r.tokenAddress = r.ca; r.tokenSymbol = r.sym; r.tokenName = r.name;
+    r.fdvUsd = r.mcapUsd; r.creatorAddress = r.creator;
+    r.xUrl = r.x ? `https://x.com/${r.x}` : null;
+    r.holderCount = r.holders; r.websiteUrl = r.website;
+    r.poolStats = { volume24hUsd:r.volUsd, liquidityUsd:r.liqUsd, priceChange24hPct:r.change24h, priceChange1hPct:null };
+  }
+  return r;
+}
 function derive(l){
+  adapt(l);
   const ps = l.poolStats||{};
   l._liq = ps.liquidityUsd ?? null;
   l._vol = ps.volume24hUsd ?? null;
@@ -406,8 +418,9 @@ async function openToken(ca){
   drawer(tokenHTML(local, null));
   if (local?.poolPriceSeries?.length) sparkline($('spark'), local.poolPriceSeries);
   try{
-    const extra = local ? `&creator=${local.creatorAddress||''}&x=${xOf(local.xUrl)||''}` : '';
+    const extra = local ? `&pad=${encodeURIComponent(local.launchpad||'')}&creator=${local.creatorAddress||''}&x=${xOf(local.xUrl)||''}` : '';
     const j = DEMO ? MOCK_TOKEN(local) : await (await fetch(`${API}/token?ca=${ca}${extra}`)).json();
+    if (j.launch) adapt(j.launch);
     if (j.launch){
       // detail endpoint is thinner & names things differently — local row wins on overlap, detail fills gaps
       const merged = local ? { ...j.launch, ...local } : j.launch;
@@ -416,8 +429,38 @@ async function openToken(ca){
         merged.poolPriceSeries = (local.poolPriceSeries?.length ? local.poolPriceSeries : j.launch.poolPriceSeries) || [];
       }
       drawer(tokenHTML(derive(merged), j.creator));
-      if (merged.poolPriceSeries?.length) sparkline($('spark'), merged.poolPriceSeries); }
+      loadChart(ca); }
   }catch{}
+}
+
+// live chart: pull noxa OHLC, render candles on the drawer canvas
+async function loadChart(ca){
+  const cv = $('spark'); if(!cv) return;
+  try{
+    const j = DEMO ? {candles:demoCandles()} : await (await fetch(`${API}/ohlc?ca=${ca}`)).json();
+    const c = j.candles||[];
+    if (c.length<2){ drawChart(cv, demoCandles(), true); return; }
+    drawChart(cv, c, false);
+  }catch{ drawChart(cv, demoCandles(), true); }
+}
+function demoCandles(){ let p=1; return Array.from({length:40},(_,i)=>{const o=p;p=Math.max(.2,p+(Math.random()-.48)*.12);return{t:i,o,h:Math.max(o,p)+.02,l:Math.min(o,p)-.02,c:p};}); }
+function drawChart(cv, candles, faded){
+  const ctx=cv.getContext('2d'), W=cv.width=cv.clientWidth*2, H=cv.height=cv.clientHeight*2;
+  ctx.clearRect(0,0,W,H);
+  const lo=Math.min(...candles.map(k=>k.l ?? k.c)), hi=Math.max(...candles.map(k=>k.h ?? k.c)), sp=hi-lo||1;
+  const y=v=>H-14-((v-lo)/sp)*(H-28);
+  const n=candles.length, cw=(W-20)/n, bw=Math.max(2,Math.min(cw*0.6,14));
+  ctx.globalAlpha=faded?0.4:1;
+  candles.forEach((k,i)=>{
+    const x=10+i*cw+cw/2;
+    const up=(k.c>=k.o);
+    ctx.strokeStyle=ctx.fillStyle=up?'#0f9d58':'#e6483d';
+    ctx.lineWidth=2;
+    if(k.h!=null&&k.l!=null){ ctx.beginPath(); ctx.moveTo(x,y(k.h)); ctx.lineTo(x,y(k.l)); ctx.stroke(); }
+    const yo=y(k.o), yc=y(k.c), top=Math.min(yo,yc), h=Math.max(2,Math.abs(yc-yo));
+    ctx.fillRect(x-bw/2, top, bw, h);
+  });
+  ctx.globalAlpha=1;
 }
 
 function tokenHTML(l, cr){
@@ -427,7 +470,8 @@ function tokenHTML(l, cr){
     l.xVerified?`<span class="badge ok">𝕏 verified</span>`:'',
     l._vl!=null&&l._vl>=8?`<span class="badge hot">V/L ${l._vl.toFixed(1)}x — wash?</span>`:'',
     l.status?`<span class=badge>${esc(l.status)}</span>`:'',
-    l.launchpadId?`<span class=badge>${esc(l.launchpadId)}</span>`:'',
+    l.launchpad?`<span class=badge style="background:var(--water1);color:#fff;border-color:var(--water2)">${esc(l.launchpad)}</span>`:'',
+    (l.alsoOn&&l.alsoOn.length)?`<span class=badge>also: ${esc(l.alsoOn.join(', '))}</span>`:'',
   ].join('');
   const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}">` : `<span class=em style="background:hsl(${(l.imageHue??200)},65%,85%)">${esc((l.tokenSymbol||'?').slice(0,2))}</span>`;
   const rapW = cr?.byWallet?.filter(r=>r.tokenAddress!==l.tokenAddress) ?? null;
@@ -449,7 +493,7 @@ function tokenHTML(l, cr){
     <div class=meta>CA ${esc(l.tokenAddress)} <button class=copy onclick="navigator.clipboard.writeText('${esc(l.tokenAddress)}')">⧉</button><br>
     dev <span class=addr style="cursor:pointer" onclick="openCreator('${esc(l.creatorAddress||'')}')">${esc(l.creatorAddress||'—')}</span>
     ${xh?` · <a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener">@${esc(xh)}</a>`:''}
-    · <a href="https://pools.trade/t/${esc(l.tokenAddress)}" target="_blank" rel="noopener">pools.trade ↗</a></div>
+    · <a href="${l.launchpad==='noxa'?`https://noxa.io/token/${esc(l.tokenAddress)}`:`https://pools.trade/t/${esc(l.tokenAddress)}`}" target="_blank" rel="noopener">${esc(l.launchpad||'pools.trade')} ↗</a></div>
   </div>
   <div class=card>
     <div class=sec>🧾 creator rap sheet — wallet</div>

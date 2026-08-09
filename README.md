@@ -1,7 +1,7 @@
 # SWIMMINGPOOL — pools.trade, filtered (swimmingpool.lol)
 
 Filters, new-pairs feed, token pages, and creator rap sheets (wallet + X handle cross-ref)
-on top of pools.trade's undocumented tRPC API. Robinhood Chain (4663).
+across Robinhood Chain launchpads (pools.trade + noxa, adapter-based)'s undocumented tRPC API. Robinhood Chain (4663).
 
 ## Deploy
 1. Push to GitHub → import in Vercel.
