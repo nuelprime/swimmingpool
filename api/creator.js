@@ -1,36 +1,26 @@
-// GET /api/creator?q=0x…    (wallet)  → curve.listLaunchesByCreator
-// GET /api/creator?q=handle (X)       → seen-index scan by handle
+// GET /api/creator?q=0x…|handle → every launch by a wallet (or X handle) across ALL launchpads.
+// Source of truth is the chain index (idx:tokens), so the count matches what the feed badge shows
+// and covers every launchpad — not just pools.trade like the old version did.
 
-const BASE = 'https://pools.trade/api/trpc';
-const CHAIN = 4663;
+import * as pools from './adapters/pools.js';
+import * as noxa from './adapters/noxa.js';
+
 const TTL = 120;
-
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 async function redis(cmd) {
   if (!R_URL || !R_TOK) return null;
   try {
-    const r = await fetch(R_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${R_TOK}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(cmd),
-    });
+    const r = await fetch(R_URL, { method: 'POST', headers: { Authorization: `Bearer ${R_TOK}`, 'Content-Type': 'application/json' }, body: JSON.stringify(cmd) });
     return (await r.json()).result;
   } catch { return null; }
 }
 
-async function trpc(proc, input) {
-  const u = `${BASE}/${proc}?input=${encodeURIComponent(JSON.stringify(input))}`;
-  const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0' } });
-  if (!r.ok) return null;
-  return (await r.json())?.result?.data ?? null;
-}
-
-const xHandle = (url) => {
-  if (!url) return null;
-  const m = String(url).match(/(?:x|twitter)\.com\/(@?[A-Za-z0-9_]{1,15})/i);
-  return m ? m[1].replace('@', '').toLowerCase() : null;
+const xOf = (u) => {
+  if (!u) return null;
+  const m = String(u).match(/(?:x|twitter)\.com\/(@?[A-Za-z0-9_]{1,15})/i);
+  return m ? m[1].replace('@', '').toLowerCase() : String(u).replace(/^@/, '').toLowerCase();
 };
 
 export default async function handler(req, res) {
@@ -38,28 +28,55 @@ export default async function handler(req, res) {
   const q = String(req.query.q || '').trim().replace(/^@/, '');
   if (!q) return res.status(400).json({ error: 'q required' });
   const isWallet = /^0x[0-9a-fA-F]{40}$/.test(q);
-  const key = `cre:v1:${q.toLowerCase()}`;
+  const key = `cre:v2:${q.toLowerCase()}`;
 
   const cached = await redis(['GET', key]);
   if (cached) { res.setHeader('X-Cache', 'hit'); return res.status(200).json(JSON.parse(cached)); }
 
-  try {
-    let launches = [];
-    if (isWallet) {
-      launches = (await trpc('curve.listLaunchesByCreator', { chainId: CHAIN, creatorAddress: q })) || [];
-    } else {
-      const h = q.toLowerCase();
-      const all = await redis(['HGETALL', 'seen:v1']);
-      if (Array.isArray(all)) {
-        for (let i = 1; i < all.length; i += 2) {
-          try { const c = JSON.parse(all[i]); if (xHandle(c.x) === h) launches.push(c); } catch {}
-        }
+  let launches = [];
+
+  if (isWallet) {
+    // 1) chain index — complete, every launchpad
+    const idxRaw = await redis(['HGETALL', 'idx:tokens']);
+    const want = q.toLowerCase();
+    if (Array.isArray(idxRaw)) {
+      for (let i = 1; i < idxRaw.length; i += 2) {
+        try {
+          const t = JSON.parse(idxRaw[i]);
+          if ((t.deployer || '').toLowerCase() === want) launches.push({ ca: t.ca, sym: t.sym, name: t.name, launchpad: t.launchpad, at: t.ts });
+        } catch {}
       }
     }
-    const payload = { at: Date.now(), query: q, mode: isWallet ? 'wallet' : 'x', launches };
-    await redis(['SET', key, JSON.stringify(payload), 'EX', String(TTL)]);
-    return res.status(200).json(payload);
-  } catch (e) {
-    return res.status(502).json({ error: String(e.message || e) });
+    // 2) adapter history as a supplement (catches launches older than the index backfill)
+    for (const a of [pools, noxa]) {
+      try {
+        const extra = await a.fetchByCreator(q);
+        for (const r of extra) {
+          if (!launches.some(l => l.ca.toLowerCase() === r.ca.toLowerCase())) {
+            launches.push({ ca: r.ca, sym: r.sym, name: r.name, launchpad: r.launchpad, at: r.createdAt, fdvUsd: r.mcapUsd });
+          }
+        }
+      } catch {}
+    }
+  } else {
+    // X-handle mode: the enriched map the feed maintains (chain index has no socials)
+    const want = q.toLowerCase();
+    const seen = await redis(['HGETALL', 'seen:v2']);
+    if (Array.isArray(seen)) {
+      for (let i = 1; i < seen.length; i += 2) {
+        try {
+          const c = JSON.parse(seen[i]);
+          if (c.x && xOf(c.x) === want) launches.push(c);
+        } catch {}
+      }
+    }
   }
+
+  // newest first
+  launches.sort((a, b) => (b.at || 0) - (a.at || 0));
+
+  const payload = { at: Date.now(), query: q, mode: isWallet ? 'wallet' : 'x', launches, total: launches.length };
+  await redis(['SET', key, JSON.stringify(payload), 'EX', String(TTL)]);
+  res.setHeader('X-Cache', 'miss');
+  return res.status(200).json(payload);
 }

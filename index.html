@@ -113,6 +113,10 @@ tbody tr:last-child td{border-bottom:none}
 .vx{color:var(--water3);font-weight:700}
 .serial{display:inline-block;background:var(--goldbg);color:#b07708;border-radius:6px;padding:0 5px;font-size:10px;font-weight:700;margin-left:4px}
 .addr{color:var(--dim);font-size:11px} .addr:hover{color:var(--water3)}
+.addr[data-dev]{cursor:pointer;background:var(--tile);border:1.5px solid var(--edge);border-radius:7px;
+  padding:3px 8px;display:inline-block;transition:all .12s}
+.addr[data-dev]:hover{border-color:var(--water2);color:var(--water3);background:#fff}
+.addr[data-dev]::after{content:" \2197";font-size:9px;opacity:.5}
 .copy{color:var(--faint);padding:0 4px} .copy:hover{color:var(--water3)}
 
 /* ---------- frog loader ---------- */
@@ -208,7 +212,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <div class="wrapH">
     <div class="spot"><span class="ring"></span><span class="ring r2"></span><span class="ring r3"></span><span class="bub"></span><span class="bub b2"></span><span class="bub b3"></span><span class="bub b4"></span></div>
     <h1>SWIMMINGPOOL<span class="lol">.lol</span></h1>
-    <span class="sub">robinhood · every pad</span>
+    <span class="sub">robinhood, every hood</span>
   </div>
 </div>
 
@@ -317,7 +321,11 @@ function fromAuction(a){
     holderCount:a.holderCount??null, buyersLast1h:a.buyersLast1h??null, _auction:true });
 }
 function serialMap(list){
+  // prefer TRUE totals from the chain index (feed.creatorCounts) so the badge matches the dev page;
+  // fall back to counting within this page when the index hasn't populated yet.
   const m = new Map();
+  const truth = feed.creatorCounts || null;
+  if (truth){ for (const [k,v] of Object.entries(truth)) m.set(k, v); return m; }
   for (const l of list){ const c=(l.creatorAddress||'').toLowerCase(); if(c) m.set(c,(m.get(c)||0)+1); }
   return m;
 }
@@ -518,7 +526,7 @@ function tokenHTML(l, cr){
       <div><span>buyers 1h</span><b>${num(l.buyersLast1h)}</b></div>
     </div>
     <div class=meta>CA ${esc(l.tokenAddress)} <button class=copy onclick="navigator.clipboard.writeText('${esc(l.tokenAddress)}')">⧉</button><br>
-    dev <span class=addr style="cursor:pointer" onclick="openCreator('${esc(l.creatorAddress||'')}')">${esc(l.creatorAddress||'—')}</span>
+    dev <span class=addr data-dev="1" style="cursor:pointer" onclick="openCreator('${esc(l.creatorAddress||'')}')">${esc(l.creatorAddress||'—')}</span>
     ${xh?` · <a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener">@${esc(xh)}</a>`:''}
     · <a href="${l.launchpad==='noxa'?`https://noxa.io/token/${esc(l.tokenAddress)}`:`https://pools.trade/t/${esc(l.tokenAddress)}`}" target="_blank" rel="noopener">${esc(l.launchpad||'pools.trade')} ↗</a></div>
   </div>
@@ -532,7 +540,8 @@ function tokenHTML(l, cr){
 }
 function rapRow(r){
   const ca = r.tokenAddress||r.ca, sym = r.tokenSymbol||r.sym||'?';
-  return `<a onclick="openToken('${esc(ca)}');return false" href="#"><b>${esc(sym)}</b> <span class=dimc>${esc(r.tokenName||r.name||'')}</span><span class=st>${r.createdAt||r.at?ageStr(r.createdAt||r.at)+' ago':''}${r.fdvUsd?' · '+usd(r.fdvUsd):''}</span></a>`;
+  const pad = r.launchpad||r.pad;
+  return `<a onclick="openToken('${esc(ca)}');return false" href="#">${pad?padLogo(pad):''}<b>${esc(sym)}</b> <span class=dimc>${esc(r.tokenName||r.name||'')}</span><span class=st>${r.createdAt||r.at?ageStr(r.createdAt||r.at)+' ago':''}${r.fdvUsd?' · '+usd(r.fdvUsd):''}</span></a>`;
 }
 
 async function openCreator(q){
@@ -543,7 +552,7 @@ async function openCreator(q){
     const j = DEMO ? MOCK_CREATOR(q) : await (await fetch(`${API}/creator?q=${encodeURIComponent(q)}`)).json();
     const L = (j.launches||[]).map(derive);
     drawer(`<div class=card><div class=dhead><h2>${j.mode==='x'?'@'+esc(j.query):'dev '+esc(short(j.query))}</h2><button class=x onclick="closeDrawer()">✕</button></div>
-      <div class=badges><span class=badge>${L.length} launch${L.length===1?'':'es'}</span><span class=badge>${j.mode==='x'?'by 𝕏 handle':'by wallet'}</span></div>
+      <div class=badges><span class=badge>${j.total??L.length} launch${(j.total??L.length)===1?'':'es'}</span><span class=badge>${j.mode==='x'?'by 𝕏 handle':'by wallet'}</span></div>
       ${j.mode==='wallet'?`<div class=meta>${esc(j.query)}</div>`:''}</div>
       <div class=card><div class=sec>launches</div>
       ${L.length?`<div class=rap>${L.map(rapRow).join('')}</div>`:'<div class=note>nothing in index</div>'}</div>`);
@@ -554,7 +563,7 @@ async function openCreator(q){
 document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
-  sort = tab==='new'?{k:'createdAt',d:-1}:{k:tab==='auction'?'fdvUsd':'_vol',d:-1};
+  sort = tab==='new'?{k:'createdAt',d:-1}:{k:'fdvUsd',d:-1};
   render();
 });
 $('filters').addEventListener('input', render);

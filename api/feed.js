@@ -69,6 +69,14 @@ export default async function handler(req, res) {
     launches = [...enrich.values()];
   }
 
+  // TRUE per-creator counts from the whole chain index (not just this page),
+  // so the feed's xN badge agrees with the dev page.
+  const creatorCounts = {};
+  for (const t of indexed) {
+    const d = (t.deployer || '').toLowerCase();
+    if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
+  }
+
   // launchpad tally for the filter UI
   const byPad = {};
   for (const l of launches) byPad[l.launchpad || 'unknown'] = (byPad[l.launchpad || 'unknown'] || 0) + 1;
@@ -92,11 +100,22 @@ export default async function handler(req, res) {
     }
   }
 
+  // maintain the enriched socials map so X-handle cross-reference works (chain index has no socials)
+  if (R_URL && R_TOK && launches.length) {
+    const hset = ['HSET', 'seen:v2'];
+    for (const l of launches) {
+      if (!l.x && !l.creator) continue;
+      hset.push(l.ca.toLowerCase(), JSON.stringify({ ca: l.ca, sym: l.sym, name: l.name, creator: l.creator, x: l.x, pad: l.launchpad, at: l.createdAt }));
+    }
+    if (hset.length > 2) await redis(hset);
+  }
+
   const lastRun = await redis(['GET', 'idx:lastRun']);
   const payload = {
     at: Date.now(),
     launches: launches.filter(l => valid(l)),
     byPad,
+    creatorCounts,
     launchpads: LAUNCHPADS,
     indexed: indexed.length,
     indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,
