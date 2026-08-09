@@ -1,0 +1,19 @@
+name: pulse
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: run chain indexer + warm feed
+        run: |
+          # 1) index new factory events into Redis (chain-level, all launchpads)
+          curl -sf -m 60 "https://swimmingpool.lol/api/indexer-core" -o /dev/null; curl -sf -m 60 "https://swimmingpool.lol/api/discover" -o /dev/null \
+            || curl -sf -m 60 "https://swimmingpool-eta.vercel.app/api/indexer-core" -o /dev/null \
+            || echo "indexer unreachable this tick"
+          # 2) warm the feed cache
+          curl -sf -m 30 "https://swimmingpool.lol/api/feed" -o /dev/null \
+            || curl -sf -m 30 "https://swimmingpool-eta.vercel.app/api/feed" -o /dev/null \
+            || echo "feed unreachable"

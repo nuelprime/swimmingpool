@@ -4,7 +4,7 @@
 // Runs incrementally from cron: each tick reads events newer than the last cursor per factory.
 // First run backfills a bounded window so the pool isn't empty.
 
-import { FACTORIES, launchpadOf } from './factories.js';
+import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from './factories.js';
 import { tokenIdentity } from './onchain.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
@@ -46,13 +46,18 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
       if (blk > newestBlock) newestBlock = blk;
       if (stopBlock && blk <= stopBlock) { params = null; break; } // caught up
       const p = decodeParams(ev);
-      const ca = (p[cfg.map.token] || '').toLowerCase();
+      // only launch-type events
+      const mc = (ev.decoded || {}).method_call || '';
+      if (!LAUNCH_EVENTS.some(n => mc.startsWith(n))) continue;
+      let ca = (cfg.tokenParam ? p[cfg.tokenParam] : null) || '';
+      if (!ca) { for (const k of TOKEN_PARAMS) { if (p[k]) { ca = p[k]; break; } } }
+      ca = String(ca).toLowerCase();
       if (!/^0x[0-9a-f]{40}$/.test(ca)) continue;
       tokens.push({
         ca,
         launchpad: cfg.launchpad,
-        deployer: (p[cfg.map.deployer] || '').toLowerCase() || null,
-        pool: (p[cfg.map.pool] || '').toLowerCase() || null,
+        deployer: String(p.deployer||'').toLowerCase() || null,
+        pool: String(p.pool||'').toLowerCase() || null,
         block: blk,
         ts: ev.block_timestamp ? new Date(ev.block_timestamp).getTime() : null,
       });
