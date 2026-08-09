@@ -101,7 +101,9 @@ tbody tr:last-child td{border-bottom:none}
 .tk img,.tk .em{width:38px;height:38px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;
   font-size:22px;background:var(--tile2);border:1.5px solid var(--edge);object-fit:cover}
 .tk .em{font-family:var(--disp);font-size:13px;color:var(--ink)}
-.tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.pad{flex:none;width:15px;height:15px;display:inline-flex}
+.pad svg{width:15px;height:15px;border-radius:50%;box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px var(--edge)}
 .tk .nm{color:var(--faint);font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .up{color:var(--green);font-weight:700} .down{color:var(--red);font-weight:700} .dimc{color:var(--faint)}
 .pill{display:inline-block;border-radius:6px;padding:1px 7px;font-weight:700}
@@ -223,6 +225,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <label class="f">vol24 ≥ <input type="number" min="0" id="fVol" placeholder="0"> <span class="u">$</span></label>
   <label class="f"><input type="checkbox" id="fXV"> 𝕏 connected</label>
   <label class="f"><input type="checkbox" id="fSer"> hide serial devs</label>
+  <select class="f" id="fPad" style="cursor:pointer"><option value="">all launchpads</option></select>
   <button class="reset" id="reset">drain filters</button>
   </div>
 
@@ -274,6 +277,15 @@ const xOf = u => { const m=String(u||'').match(/(?:x|twitter)\.com\/(@?[A-Za-z0-
 const copy = (t,ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(t); };
 
 // map canonical API row (ca/sym/mcapUsd/volUsd/creator/x/…) → fields the UI already uses
+// launchpad logos: pool-framed circle wrapping an official-ish mark. Inline SVG, no external fetch.
+const PADLOGO = {
+  'noxa':        c=>`<span class="pad" title="noxa" style="--pc:#7c5cff"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--pc)"/><text x="8" y="11.5" font-size="9" font-weight="700" text-anchor="middle" fill="#fff" font-family="monospace">N</text></svg></span>`,
+  'pools.trade': c=>`<span class="pad" title="pools.trade" style="--pc:#2bd67b"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--pc)"/><path d="M8 4.5c1.6 1.8 2.6 3 2.6 4.2A2.6 2.6 0 0 1 8 11.3 2.6 2.6 0 0 1 5.4 8.7C5.4 7.5 6.4 6.3 8 4.5z" fill="#fff"/></svg></span>`,
+  'pons':        c=>`<span class="pad" title="pons" style="--pc:#ff8a3d"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--pc)"/><text x="8" y="11.5" font-size="9" font-weight="700" text-anchor="middle" fill="#fff" font-family="monospace">P</text></svg></span>`,
+  'unknown':     c=>`<span class="pad" title="new launchpad" style="--pc:#94a3b8"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--pc)"/><text x="8" y="11.5" font-size="9" font-weight="700" text-anchor="middle" fill="#fff" font-family="monospace">?</text></svg></span>`,
+};
+const padLogo = (p)=> (PADLOGO[p]||PADLOGO['unknown'])();
+
 function adapt(r){
   if (r && r.ca && r.tokenAddress===undefined){
     r.tokenAddress = r.ca; r.tokenSymbol = r.sym; r.tokenName = r.name;
@@ -318,6 +330,7 @@ async function load(){
     }
     feed.launches.forEach(derive);
     feed._serial = serialMap(feed.launches);
+    populatePads();
     if (firstPaint){ firstPaint=false; setTimeout(()=>{ render();
       const u=new URL(location); const ca=u.searchParams.get('ca'), dev=u.searchParams.get('dev');
       if (ca && /^0x[0-9a-fA-F]{40}$/.test(ca)) openToken(ca); else if (dev) openCreator(dev);
@@ -329,7 +342,16 @@ async function load(){
 }
 
 /* ================= filters ================= */
+function populatePads(){
+  const sel=$('fPad'); if(!sel) return;
+  const cur=sel.value;
+  const pads=feed.byPad||{};
+  const opts=['<option value="">all launchpads</option>'].concat(
+    Object.keys(pads).sort((a,b)=>pads[b]-pads[a]).map(p=>`<option value="${esc(p)}">${esc(p)} (${pads[p]})</option>`));
+  sel.innerHTML=opts.join(''); sel.value=cur;
+}
 function passes(l){
+  if ($('fPad').value && l.launchpad!==$('fPad').value) return false;
   const v = id => { const el=$(id); let x=parseFloat(el.value); if(isNaN(x)) return null; if(x<0){x=0; el.value='';} return x; };
   const mc=v('fMc'), age=v('fAge'), hold=v('fHold'), vol=v('fVol');
   if (mc!=null && !(l.fdvUsd>=mc)) return false;
@@ -373,7 +395,7 @@ function render(){
     const fb = `<span class=em style=&quot;background:hsl(${(l.imageHue??200)},65%,85%)&quot;>${esc((l.tokenSymbol||'?').slice(0,2))}</span>`.replace(/&quot;/g,'\'');
     const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
     return `<tr data-ca="${esc(l.tokenAddress)}">
-      <td><div class=tk>${img}<div><div class=sym>${esc((l.tokenSymbol||'').slice(0,24))}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
+      <td><div class=tk>${img}<div><div class=sym>${padLogo(l.launchpad)}${esc((l.tokenSymbol||'').slice(0,24))}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="24h">${pct(l._c24)}</td>
@@ -546,11 +568,12 @@ window.closeDrawer = closeDrawer; window.openToken = openToken; window.openCreat
 
 /* ================= demo data =============== */
 const MOCK = {
+  byPad:{'pools.trade':1,'noxa':2,'pons':1},
   launches: [
-    {tokenAddress:'0x6245e67affA44a23077f0Ea7f981a8DC743a0c47',tokenSymbol:'FRONG',tokenName:'frong',description:"it's frong, baby",xUrl:'https://x.com/zacklabadie',xVerified:false,imageEmoji:'🔥',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-7*864e5).toISOString(),fdvUsd:5496141,graduationTargetUsd:50000,graduationProgress:109.9,holderCount:12464,creatorAddress:'0xe19537029b8013dc37c55d509b0a5038c7c5ce58',buyersLast1h:221,poolStats:{priceUsd:.0055,priceChange1hPct:-9.8,priceChange24hPct:-30.1,volume24hUsd:9361853,liquidityUsd:849509},poolPriceSeries:Array.from({length:24},(_,i)=>({at:'',clearingPriceUsd:.006-Math.sin(i/3)*.0006-i*.00001}))},
-    {tokenAddress:'0x495c69E5Df688150b97722783EE8BBce134b60Df',tokenSymbol:'CHAINMANCER',tokenName:'chainmancer',xUrl:null,xVerified:false,imageEmoji:'🧙',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-42*6e4).toISOString(),fdvUsd:8200,graduationProgress:4.1,holderCount:12,creatorAddress:'0x6bb933af35e32893a7ffd2d5e932f022b063a412',buyersLast1h:6,poolStats:{priceChange1hPct:12.4,priceChange24hPct:12.4,volume24hUsd:900,liquidityUsd:2100},poolPriceSeries:Array.from({length:12},(_,i)=>({clearingPriceUsd:.00001+i*.0000005}))},
-    {tokenAddress:'0x0f68BEE9880a41CDf9713C24358FfDB400000001',tokenSymbol:'PIGI',tokenName:'pigi',xUrl:'https://x.com/pigicoin',xVerified:false,imageEmoji:'🐷',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-3*36e5).toISOString(),fdvUsd:41000,graduationProgress:38,holderCount:214,creatorAddress:'0x6bb933af35e32893a7ffd2d5e932f022b063a412',buyersLast1h:41,poolStats:{priceChange1hPct:4.1,priceChange24hPct:88,volume24hUsd:390000,liquidityUsd:31000},poolPriceSeries:Array.from({length:20},(_,i)=>({clearingPriceUsd:.00004+Math.random()*.000004}))},
-    {tokenAddress:'0x0871000000000000000000000000000000004B26',tokenSymbol:'FROGLET',tokenName:'froglet',xUrl:'https://x.com/frogletxyz',xVerified:true,imageEmoji:'🐸',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-20*36e5).toISOString(),fdvUsd:230000,graduationProgress:100,holderCount:3120,creatorAddress:'0x08717c843f55ef7c68876a7df936d29816084b26',buyersLast1h:97,poolStats:{priceChange1hPct:2.2,priceChange24hPct:14.9,volume24hUsd:410000,liquidityUsd:120000},poolPriceSeries:Array.from({length:24},(_,i)=>({clearingPriceUsd:.0002+i*.000002}))},
+    {tokenAddress:'0x6245e67affA44a23077f0Ea7f981a8DC743a0c47',launchpad:'pools.trade',tokenSymbol:'FRONG',tokenName:'frong',description:"it's frong, baby",xUrl:'https://x.com/zacklabadie',xVerified:false,imageEmoji:'🔥',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-7*864e5).toISOString(),fdvUsd:5496141,graduationTargetUsd:50000,graduationProgress:109.9,holderCount:12464,creatorAddress:'0xe19537029b8013dc37c55d509b0a5038c7c5ce58',buyersLast1h:221,poolStats:{priceUsd:.0055,priceChange1hPct:-9.8,priceChange24hPct:-30.1,volume24hUsd:9361853,liquidityUsd:849509},poolPriceSeries:Array.from({length:24},(_,i)=>({at:'',clearingPriceUsd:.006-Math.sin(i/3)*.0006-i*.00001}))},
+    {tokenAddress:'0x495c69E5Df688150b97722783EE8BBce134b60Df',launchpad:'noxa',tokenSymbol:'CHAINMANCER',tokenName:'chainmancer',xUrl:null,xVerified:false,imageEmoji:'🧙',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-42*6e4).toISOString(),fdvUsd:8200,graduationProgress:4.1,holderCount:12,creatorAddress:'0x6bb933af35e32893a7ffd2d5e932f022b063a412',buyersLast1h:6,poolStats:{priceChange1hPct:12.4,priceChange24hPct:12.4,volume24hUsd:900,liquidityUsd:2100},poolPriceSeries:Array.from({length:12},(_,i)=>({clearingPriceUsd:.00001+i*.0000005}))},
+    {tokenAddress:'0x0f68BEE9880a41CDf9713C24358FfDB400000001',launchpad:'pons',tokenSymbol:'PIGI',tokenName:'pigi',xUrl:'https://x.com/pigicoin',xVerified:false,imageEmoji:'🐷',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-3*36e5).toISOString(),fdvUsd:41000,graduationProgress:38,holderCount:214,creatorAddress:'0x6bb933af35e32893a7ffd2d5e932f022b063a412',buyersLast1h:41,poolStats:{priceChange1hPct:4.1,priceChange24hPct:88,volume24hUsd:390000,liquidityUsd:31000},poolPriceSeries:Array.from({length:20},(_,i)=>({clearingPriceUsd:.00004+Math.random()*.000004}))},
+    {tokenAddress:'0x0871000000000000000000000000000000004B26',launchpad:'noxa',tokenSymbol:'FROGLET',tokenName:'froglet',xUrl:'https://x.com/frogletxyz',xVerified:true,imageEmoji:'🐸',chainId:4663,status:'curveLive',createdAt:new Date(Date.now()-20*36e5).toISOString(),fdvUsd:230000,graduationProgress:100,holderCount:3120,creatorAddress:'0x08717c843f55ef7c68876a7df936d29816084b26',buyersLast1h:97,poolStats:{priceChange1hPct:2.2,priceChange24hPct:14.9,volume24hUsd:410000,liquidityUsd:120000},poolPriceSeries:Array.from({length:24},(_,i)=>({clearingPriceUsd:.0002+i*.000002}))},
   ],
   auctions: [
     {tokenAddress:'0xdf4b1c4eA6B2DE7A2EF22D7C05EA04BB2A009212',tokenSymbol:'1',tokenName:'1$',xUrl:'https://x.com/1usdforever',imageEmoji:'🦩',chainId:4663,status:'live',clearingPriceUsd:1.45e-6,fdvUsd:1455,raisedUsd:721,graduationProgress:.14,createdAt:new Date(Date.now()-9*36e5).toISOString(),creatorAddress:'0x48e4e74fe1d0c14404ce000000000000000000aa'},
