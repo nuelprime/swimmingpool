@@ -25,7 +25,16 @@ async function enrichMap() {
   const [p, n] = await Promise.allSettled([pools.fetchFeed(), noxa.fetchFeed()]);
   for (const s of [p, n]) {
     if (s.status !== 'fulfilled') continue;
-    for (const row of s.value) m.set(row.ca.toLowerCase(), row);
+    for (const row of s.value) {
+      const k = row.ca.toLowerCase();
+      const prev = m.get(k);
+      if (!prev) { m.set(k, row); continue; }
+      // keep the first source's launchpad tag; fill only missing numbers/media from the later one
+      for (const f of ['mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','x','telegram','website','createdAt','sym','name']) {
+        if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
+      }
+      (prev.alsoOn ||= []).push(row.launchpad);
+    }
   }
   return m;
 }
@@ -115,7 +124,7 @@ export default async function handler(req, res) {
     at: Date.now(),
     launches: launches.filter(l => valid(l)),
     byPad,
-    creatorCounts,
+    creatorCounts: Object.keys(creatorCounts).length ? creatorCounts : null,
     launchpads: LAUNCHPADS,
     indexed: indexed.length,
     indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,

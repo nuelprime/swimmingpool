@@ -1,3 +1,25 @@
 {
-  "rewrites": [{ "source": "/", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/indexer-core.js": {
+      "maxDuration": 60
+    },
+    "api/discover.js": {
+      "maxDuration": 60
+    },
+    "api/feed.js": {
+      "maxDuration": 30
+    },
+    "api/creator.js": {
+      "maxDuration": 20
+    },
+    "api/token.js": {
+      "maxDuration": 20
+    }
+  }
 }

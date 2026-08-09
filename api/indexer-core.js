@@ -69,10 +69,21 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
   return { tokens, newestBlock };
 }
 
-export async function runIndexer({ backfillPages = 3, livePages = 2 } = {}) {
+export async function runIndexer({ backfillPages = 3, livePages = 2, only = null } = {}) {
   if (!R_URL || !R_TOK) return { error: 'no redis' };
   const summary = {};
-  for (const [addr, cfg] of Object.entries(FACTORIES)) {
+  // rotate one factory per invocation so each run fits the serverless time budget.
+  const all = Object.entries(FACTORIES);
+  let targets = all;
+  if (!only) {
+    const turnRaw = await redis(['GET', 'idx:turn']);
+    const turn = turnRaw ? parseInt(turnRaw, 10) : 0;
+    targets = [all[turn % all.length]];
+    await redis(['SET', 'idx:turn', String((turn + 1) % all.length)]);
+  } else {
+    targets = all.filter(([a, c]) => c.launchpad === only || a === only.toLowerCase());
+  }
+  for (const [addr, cfg] of targets) {
     const cursorKey = `idx:cursor:${addr}`;
     const lastRaw = await redis(['GET', cursorKey]);
     const last = lastRaw ? parseInt(lastRaw, 10) : 0;
@@ -82,7 +93,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2 } = {}) {
     // write tokens into the index hash (idx:tokens), keyed by CA
     if (res.tokens.length) {
       // fill on-chain identity for the newest tokens (bounded so cron stays fast)
-      const toName = res.tokens.slice(0, 20);
+      const toName = res.tokens.slice(0, 8);
       await Promise.all(toName.map(async t => {
         const id = await tokenIdentity(t.ca);
         t.name = id.name; t.sym = id.symbol;
@@ -102,6 +113,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2 } = {}) {
 // HTTP entry — called by cron (pulse.yml) or manually
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const out = await runIndexer({ backfillPages: 4, livePages: 2 });
-  return res.status(200).json({ ok: true, indexed: out, at: Date.now() });
+  const only = req.query.only ? String(req.query.only) : null;
+  const out = await runIndexer({ backfillPages: 3, livePages: 2, only });
+  const total = await redis(['HLEN', 'idx:tokens']);
+  return res.status(200).json({ ok: true, ranThisTick: out, indexTotal: total, at: Date.now() });
 }

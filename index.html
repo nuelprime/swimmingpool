@@ -219,7 +219,6 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 <div class="lanes">
   <button class="lane on" data-tab="new">NEW PAIRS</button>
   <button class="lane" data-tab="top">TOP</button>
-  <button class="lane" data-tab="auction">AUCTIONS</button>
   <div class="search"><input id="q" placeholder="CA · dev wallet · @xhandle" spellcheck="false"></div>
 </div>
 
@@ -324,7 +323,7 @@ function serialMap(list){
   // prefer TRUE totals from the chain index (feed.creatorCounts) so the badge matches the dev page;
   // fall back to counting within this page when the index hasn't populated yet.
   const m = new Map();
-  const truth = feed.creatorCounts || null;
+  const truth = (feed.creatorCounts && Object.keys(feed.creatorCounts).length) ? feed.creatorCounts : null;
   if (truth){ for (const [k,v] of Object.entries(truth)) m.set(k, v); return m; }
   for (const l of list){ const c=(l.creatorAddress||'').toLowerCase(); if(c) m.set(c,(m.get(c)||0)+1); }
   return m;
@@ -391,7 +390,7 @@ const sortVal = (l,k) =>
   k==='ca'?l.tokenAddress: k==='createdAt'?new Date(l.createdAt||0).getTime(): l[k];
 function render(){
   header();
-  const src = tab==='auction' ? feed.auctions.map(fromAuction) : feed.launches.slice();
+  const src = feed.launches.slice();
   let list = src.filter(passes);
   list.sort((a,b)=>{
     let A=sortVal(a,sort.k), B=sortVal(b,sort.k);
