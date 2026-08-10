@@ -20,7 +20,7 @@ async function redis(cmd) {
   } catch { return null; }
 }
 
-async function indexedPons(limit = 40) {
+async function indexedPons(limit = 150) {
   const all = await redis(['HGETALL', 'idx:tokens']);
   const out = [];
   if (Array.isArray(all)) {
@@ -56,14 +56,17 @@ async function toRow(t, px) {
 export async function fetchFeed() {
   if (!R_URL || !R_TOK) return [];
   const px = await ethUsd();
-  const raw = await indexedPons(40);
+  const raw = await indexedPons(150);
   if (!raw.length) return [];
   const out = [];
-  const chunk = 8;                             // bounded — these are RPC reads
+  const chunk = 12;                            // bounded — these are RPC reads
   for (let i = 0; i < raw.length; i += chunk) {
     const part = await Promise.all(raw.slice(i, i + chunk).map(t => toRow(t, px).catch(() => null)));
     for (const r of part) if (r && valid(r)) out.push(r);
   }
+  // rank by market cap — the index gives us newest-first, which on a pad doing thousands of
+  // launches a day is mostly bot spam. Surface the biggest of what we can actually see.
+  out.sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0));
   return out;
 }
 

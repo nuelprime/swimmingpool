@@ -126,6 +126,10 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     if (res.newestBlock > last) await redis(['SET', cursorKey, String(res.newestBlock)]);
     summary[cfg.launchpad] = res.tokens.length;
   }
+  // stamp as soon as the factory read is done — everything after this is optional polish,
+  // and we must not lose the record of a successful run if a slow step times out.
+  await redis(['SET', 'idx:lastRun', String(Date.now())]);
+
   // PROGRESSIVE IDENTITY BACKFILL — name tokens already in the index that still lack a symbol,
   // so the feed's quality gate lets more of them through each tick instead of them sitting unrenderable.
   try {
@@ -136,7 +140,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         try { const t = JSON.parse(all[i]); if (!t.sym) need.push(t); } catch {}
       }
     }
-    const batch = need.slice(0, 30);
+    const batch = need.slice(0, 12);
     if (batch.length) {
       await Promise.all(batch.map(async t => {
         const id = await tokenIdentity(t.ca);
@@ -157,14 +161,12 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const cas = [];
     if (Array.isArray(seen)) for (let i = 0; i < seen.length; i += 2) cas.push(seen[i]);
     if (cas.length) {
-      const t = await resolveTags(cas, 40);
+      const t = await resolveTags(cas, 12);
       summary._tagged = t.resolved;
       if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}
 
-  // stamp last run
-  await redis(['SET', 'idx:lastRun', String(Date.now())]);
   return summary;
 }
 
