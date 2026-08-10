@@ -1,12 +1,13 @@
-// pons adapter. pons has no public data API, so this reads everything from the chain:
-// tokens + pool + pairToken come from the factory event (chain index), and market data
-// comes from the pool itself via the on-chain reader.
+// pons adapter — uses pons's own launch API (discovered via their launchpad page).
+// Endpoint: https://www.ponsfamily.com/api/pons-launches  (NOTE: the bare domain 308-redirects,
+// the www host is required). Returns USD values directly, so no on-chain reads needed.
 //
-// Same quality bar as API-backed adapters: no symbol or no real numbers → no row.
+// Params: explore=1, sort=marketCap|newest|oldest|volume, age=all|24h|7d, page=N, includeGraduated=true
+// Payload: { active:{items,page,pageSize,total}, graduated:{…}, activeTotal, graduatedTotal, launchTotal }
 
-import { ethUsd, valid } from './_shape.js';
-import { marketData, tokenIdentity } from '../onchain.js';
+import { valid } from './_shape.js';
 
+const BASE = 'https://www.ponsfamily.com/api/pons-launches';
 export const PONS_FACTORY = '0xa5aab3f0c6eeadf30ef1d3eb997108e976351feb';
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -20,72 +21,75 @@ async function redis(cmd) {
   } catch { return null; }
 }
 
-async function indexedPons(limit = 150) {
-  const all = await redis(['HGETALL', 'idx:tokens']);
-  const out = [];
-  if (Array.isArray(all)) {
-    for (let i = 1; i < all.length; i += 2) {
-      try { const t = JSON.parse(all[i]); if (t.launchpad === 'pons' && t.pool) out.push(t); } catch {}
-    }
-  }
-  out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-  return out.slice(0, limit);
+async function page(sort, n) {
+  const u = `${BASE}?explore=1&sort=${sort}&age=all&page=${n}&includeGraduated=true`;
+  const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0', accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw new Error(`pons ${r.status}`);
+  return r.json();
 }
 
-async function toRow(t, px) {
-  let sym = t.sym, name = t.name;
-  if (!sym) { const id = await tokenIdentity(t.ca); sym = id.symbol; name = id.name; }
-  if (!sym) return null;
-
-  const md = await marketData({ token: t.ca, pool: t.pool, pairToken: t.pairToken }, px);
-  if (!md) return null;                       // no real market → no row
-
+function norm(t) {
+  if (!t?.token || !t.symbol) return null;
   return {
-    ca: t.ca, sym, name: name || sym,
+    ca: t.token,
+    sym: t.symbol,
+    name: t.name || t.symbol,
     launchpad: 'pons',
     creator: t.deployer || null,
     x: null, telegram: null, website: null,
-    mcapUsd: md.mcapUsd, volUsd: null, liqUsd: md.liqUsd,
+    mcapUsd: t.marketCapUsd ?? null,
+    volUsd: null,                                  // not exposed by this endpoint
+    liqUsd: t.liquidityUsd ?? null,
     change24h: null, holders: null, buyers1h: null,
-    createdAt: t.ts || null,
-    status: null, imageUrl: null, imageEmoji: null, imageHue: null,
-    spark: null, _pool: t.pool,
+    createdAt: t.launchedAt ? new Date(t.launchedAt).getTime() : null,
+    status: t.graduated ? 'graduated' : 'curve',
+    imageUrl: (t.logo && /^https:/.test(t.logo)) ? t.logo : null,
+    imageEmoji: null, imageHue: null, spark: null,
+    graduationPct: t.graduationProgressPct ?? null,
+    _pool: t.pool || null, _pairToken: t.pairToken || null,
   };
 }
 
 export async function fetchFeed() {
-  if (!R_URL || !R_TOK) return [];
-  const px = await ethUsd();
-  const raw = await indexedPons(150);
-  if (!raw.length) return [];
-  const out = [];
-  const chunk = 12;                            // bounded — these are RPC reads
-  for (let i = 0; i < raw.length; i += chunk) {
-    const part = await Promise.all(raw.slice(i, i + chunk).map(t => toRow(t, px).catch(() => null)));
-    for (const r of part) if (r && valid(r)) out.push(r);
-  }
-  // rank by market cap — the index gives us newest-first, which on a pad doing thousands of
-  // launches a day is mostly bot spam. Surface the biggest of what we can actually see.
-  out.sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0));
-  return out;
+  // top by market cap + the newest, so both tabs have real pons rows
+  const [byCap, byNew] = await Promise.allSettled([
+    Promise.all([page('marketCap', 1), page('marketCap', 2)]),
+    page('newest', 1),
+  ]);
+  const out = new Map();
+  const push = (payload) => {
+    for (const bucket of ['graduated', 'active']) {
+      for (const t of (payload?.[bucket]?.items || [])) {
+        const r = norm(t);
+        if (r && valid(r) && (r.mcapUsd || r.liqUsd)) out.set(r.ca.toLowerCase(), r);
+      }
+    }
+  };
+  if (byCap.status === 'fulfilled') byCap.value.forEach(push);
+  if (byNew.status === 'fulfilled') push(byNew.value);
+  if (!out.size) throw new Error('pons: empty');
+  return [...out.values()];
 }
 
 export async function fetchToken(ca) {
-  if (!R_URL || !R_TOK) return null;
-  const rec = await redis(['HGET', 'idx:tokens', ca.toLowerCase()]);
-  if (!rec) return null;
+  // no per-token route exposed; find it in the mcap-sorted pages
   try {
-    const t = JSON.parse(rec);
-    if (t.launchpad !== 'pons') return null;
-    return await toRow(t, await ethUsd());
-  } catch { return null; }
+    for (const n of [1, 2, 3]) {
+      const p = await page('marketCap', n);
+      for (const bucket of ['graduated', 'active']) {
+        const hit = (p?.[bucket]?.items || []).find(t => (t.token || '').toLowerCase() === ca.toLowerCase());
+        if (hit) return norm(hit);
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export async function fetchByCreator(wallet) {
   return byCreatorFromIndex(wallet, 'pons');
 }
 
-// shared: pull a wallet's launches for one launchpad out of the chain index
+// shared helper: a wallet's launches for one launchpad, out of the chain index
 export async function byCreatorFromIndex(wallet, launchpad) {
   if (!R_URL || !R_TOK) return [];
   const all = await redis(['HGETALL', 'idx:tokens']);
