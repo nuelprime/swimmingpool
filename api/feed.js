@@ -12,10 +12,19 @@ import * as chain from '../lib/adapters/chain.js';
 import * as gecko from '../lib/adapters/gecko.js';
 import * as indexed from '../lib/adapters/indexed.js';
 import { valid } from '../lib/adapters/_shape.js';
-import { LAUNCHPADS, TOKEN_PAD_OVERRIDES } from '../lib/factories.js';
-import { cachedTags, resolveTags } from '../lib/tagger.js';
+import { LAUNCHPADS, TOKEN_PAD_OVERRIDES, FACTORIES } from '../lib/factories.js';
+const KNOWN_FACTORY = new Set(Object.keys(FACTORIES));
+import { cachedTags, resolveTags, rawFactories } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons } from '../lib/holders.js';
+
+// Single source of truth for the payload shape. FILLABLE = everything except identity fields
+// (which must never be overwritten) and derived ones (resolved later in the pipeline).
+const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website',
+              'mcapUsd','volUsd','liqUsd','change24h','holders','buyers1h','createdAt',
+              'status','imageUrl','imageEmoji','imageHue','description','graduationPct','xVerified'];
+const NEVER_FILL = new Set(['ca','sym','alsoOn','creatorEns']);
+const FILLABLE = KEEP.filter(f => !NEVER_FILL.has(f));
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 // gecko first: one API covering every pool on the chain with accurate market cap, volume,
@@ -65,7 +74,10 @@ export default async function handler(req, res) {
       // first adapter keeps the launchpad tag; later ones only fill genuine gaps
       // 'launchpad' MUST be in this list: gecko (first) knows the numbers but not the pad,
       // so the launchpad adapters that follow have to be able to fill the tag.
-      for (const f of ['launchpad','mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','imageEmoji','imageHue','x','telegram','website','createdAt','name','status','buyers1h','graduationPct']) {
+      // Every field the payload keeps must be listed here, or the first adapter's null wins
+      // permanently. 'launchpad' missing wiped launchpad tags; 'creator' missing wiped every dev
+      // wallet. FILLABLE is derived from KEEP below so the two can't drift apart again.
+      for (const f of FILLABLE) {
         if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
       }
       if (!prev.alsoOn?.includes(row.launchpad)) (prev.alsoOn ||= []).push(row.launchpad);
@@ -100,6 +112,7 @@ export default async function handler(req, res) {
     }
     // FALLBACK: per-token factory cache, for anything the index hasn't reached yet.
     const tags = await cachedTags(launches.map(l => l.ca));
+    const rawTags = await rawFactories(launches.map(l => l.ca));
     for (const l of launches) {
       const real = idxTags.get(l.ca.toLowerCase()) || tags.get(l.ca.toLowerCase());
       if (real && real !== l.launchpad) {
@@ -109,6 +122,14 @@ export default async function handler(req, res) {
         l.padUnverified = true;              // tag cache hasn't reached it yet
         if (!l.launchpad) l.launchpad = 'other';
       }
+      // The tag cache stores each token's contract creator. When that address ISN'T a known
+      // factory it's an EOA that deployed the token directly — i.e. the dev wallet. Use it so
+      // gecko-only tokens (STONKBROKER, DOGO, PIPEDOG…) stop showing a blank DEV column.
+      if (!l.creator) {
+        const rawFac = rawTags.get(l.ca.toLowerCase());
+        if (rawFac && !KNOWN_FACTORY.has(rawFac)) l.creator = rawFac;
+      }
+
       // human-verified override wins over everything: a pad's own team token generally has no
       // factory trail, so $PONS/$NOVAAI would otherwise sit in 'other' forever.
       const ov = TOKEN_PAD_OVERRIDES[l.ca.toLowerCase()];
@@ -184,6 +205,11 @@ export default async function handler(req, res) {
         if (!byPadQ.has(k)) byPadQ.set(k, []);
         byPadQ.get(k).push(l.ca.toLowerCase());
       }
+      // newest first inside each pad: a token minutes old is when holder count actually matters,
+      // and it's the one the NEW PAIRS tab is showing.
+      const ageOf = new Map(launches.map(l => [l.ca.toLowerCase(), l.createdAt || 0]));
+      for (const q of byPadQ.values()) q.sort((a, b) => (ageOf.get(b) || 0) - (ageOf.get(a) || 0));
+
       const queues = [...byPadQ.values()];
       const fair = [];
       for (let i = 0; fair.length < 400 && queues.some(q => q.length); i++) {
@@ -238,9 +264,6 @@ export default async function handler(req, res) {
 
   // SLIM THE PAYLOAD — strip internal bookkeeping (_pool, _factory, _fromChain, dexed…) and
   // fields the frontend never reads. 700+ tokens was ~420KB, most of it dead weight on mobile.
-  const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website',
-                'mcapUsd','volUsd','liqUsd','change24h','holders','buyers1h','createdAt',
-                'status','imageUrl','imageEmoji','imageHue','description','graduationPct','xVerified'];
   const slim = launches.map(l => {
     const o = {};
     for (const k of KEEP) if (l[k] !== null && l[k] !== undefined) o[k] = l[k];

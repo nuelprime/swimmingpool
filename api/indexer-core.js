@@ -89,8 +89,10 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   if (!only) {
     const turnRaw = await redis(['GET', 'idx:turn']);
     const turn = turnRaw ? parseInt(turnRaw, 10) : 0;
-    targets = [all[turn % all.length]];
-    await redis(['SET', 'idx:turn', String((turn + 1) % all.length)]);
+    // Take three factories per run rather than one. With 9 registered, one-per-run meant a pad
+    // like letscash only got a turn every ~45 minutes, so its new pairs never surfaced.
+    targets = [all[turn % all.length], all[(turn + 1) % all.length], all[(turn + 2) % all.length]];
+    await redis(['SET', 'idx:turn', String((turn + 3) % all.length)]);
   } else {
     targets = all.filter(([a, c]) => c.launchpad === only || a === only.toLowerCase());
   }
