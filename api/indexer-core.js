@@ -8,6 +8,7 @@ import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from '../lib/fact
 import { tokenIdentity } from '../lib/onchain.js';
 import { resolveTags } from '../lib/tagger.js';
 import { resolveHolders } from '../lib/holders.js';
+import { resolveDevs } from '../lib/devs.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -173,6 +174,15 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         if (raw) { const list = JSON.parse(raw); if (Array.isArray(list) && list.length) holdTargets = list; }
       } catch {}
       summary._holders = await resolveHolders(holdTargets, 30);
+
+      // dev wallets: resolve from the feed's worklist (tokens whose creator is a factory, so the
+      // human wallet only shows up as the creation-tx sender)
+      let devTargets = cas;
+      try {
+        const raw = await redis(['GET', 'need:devs']);
+        if (raw) { const l = JSON.parse(raw); if (Array.isArray(l) && l.length) devTargets = l; }
+      } catch {}
+      summary._devs = await resolveDevs(devTargets, 25);
       if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}

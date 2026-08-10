@@ -168,6 +168,13 @@ tbody tr:last-child td{border-bottom:none}
 .kv span{font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
 .spark{width:100%;height:150px;background:linear-gradient(180deg,#eaf8fd,#dcf2fa);border:1.5px solid var(--edge);border-radius:10px;margin-top:10px}
 .meta{font-size:11px;color:var(--dim);margin-top:10px;word-break:break-all}
+.links{display:flex;gap:8px;margin-top:12px}
+.links .lnk{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:var(--tile);border:1.5px solid var(--edge);border-radius:11px;padding:9px 10px;
+  font-size:11px;font-weight:700;color:var(--ink);text-decoration:none;transition:all .12s}
+.links .lnk:hover{border-color:var(--water2);background:#fff;text-decoration:none}
+.links .lnkico{font-size:13px;line-height:1}
+.links .arr{color:var(--faint);font-size:9px}
 .sec{font-family:var(--disp);color:var(--ink);font-size:13px;letter-spacing:.03em;margin:2px 0 8px}
 .rap{display:flex;flex-direction:column;gap:6px}
 .rap a{display:flex;gap:8px;align-items:center;color:var(--ink);padding:7px 10px;background:var(--tile);
@@ -292,6 +299,17 @@ const PADIMG = {
   'letscash':    'data:image/png;base64,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',
   'dontblink':   'data:image/png;base64,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',
 };
+// where a token lives on its own launchpad
+const PADSITE = {
+  'pools.trade': ca=>`https://pools.trade/t/${ca}`,
+  'noxa':        ca=>`https://noxa.io/token/${ca}`,
+  'pons':        ca=>`https://ponsfamily.com/token/${ca}`,
+  'arena':       ca=>`https://arena.social/token/${ca}`,
+  'bankr':       ca=>`https://bankr.bot/token/${ca}`,
+  'letscash':    ca=>`https://letscash.fun/token/${ca}`,
+  'dontblink':   ca=>`https://dontblink.family/token/${ca}`,
+};
+
 const padLogo = (p)=>{
   const src = PADIMG[p];
   if (src) return `<span class="pad" title="${esc(p)}"><img src="${src}" alt=""></span>`;
@@ -486,23 +504,29 @@ async function loadChart(ca){
 }
 function demoCandles(){ let p=1; return Array.from({length:40},(_,i)=>{const o=p;p=Math.max(.2,p+(Math.random()-.48)*.12);return{t:i,o,h:Math.max(o,p)+.02,l:Math.min(o,p)-.02,c:p};}); }
 function drawChart(cv, candles, faded){
+  // Line + area fill. The candlestick version was a step backwards at this size — too much ink
+  // for a 150px canvas, and the wicks made small moves unreadable.
   const ctx=cv.getContext('2d'), W=cv.width=cv.clientWidth*2, H=cv.height=cv.clientHeight*2;
   ctx.clearRect(0,0,W,H);
-  const lo=Math.min(...candles.map(k=>k.l ?? k.c)), hi=Math.max(...candles.map(k=>k.h ?? k.c)), sp=hi-lo||1;
-  const y=v=>H-14-((v-lo)/sp)*(H-28);
-  const n=candles.length, cw=(W-20)/n, bw=Math.max(2,Math.min(cw*0.6,14));
-  ctx.globalAlpha=faded?0.4:1;
-  candles.forEach((k,i)=>{
-    const x=10+i*cw+cw/2;
-    const up=(k.c>=k.o);
-    ctx.strokeStyle=ctx.fillStyle=up?'#0f9d58':'#e6483d';
-    ctx.lineWidth=2;
-    if(k.h!=null&&k.l!=null){ ctx.beginPath(); ctx.moveTo(x,y(k.h)); ctx.lineTo(x,y(k.l)); ctx.stroke(); }
-    const yo=y(k.o), yc=y(k.c), top=Math.min(yo,yc), h=Math.max(2,Math.abs(yc-yo));
-    ctx.fillRect(x-bw/2, top, bw, h);
-  });
+  const ys=candles.map(k=>k.c).filter(v=>v!=null);
+  if(ys.length<2) return;
+  const lo=Math.min(...ys), hi=Math.max(...ys), sp=(hi-lo)||1;
+  const pts=ys.map((v,i)=>[10+i/(ys.length-1)*(W-20), H-14-((v-lo)/sp)*(H-28)]);
+  const up=ys.at(-1)>=ys[0];
+  ctx.globalAlpha=faded?0.35:1;
+  // area
+  ctx.beginPath(); ctx.moveTo(pts[0][0],H);
+  pts.forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.lineTo(pts.at(-1)[0],H); ctx.closePath();
+  ctx.fillStyle=up?'rgba(15,157,88,.14)':'rgba(230,72,61,.12)'; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle=up?'#0f9d58':'#e6483d';
+  pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+  ctx.stroke();
   ctx.globalAlpha=1;
 }
+
 
 function tokenHTML(l, cr){
   if(!l) return `<div class=card><div class=dhead><h2>not indexed</h2><button class=x onclick="closeDrawer()">✕</button></div></div>`;
@@ -531,10 +555,15 @@ function tokenHTML(l, cr){
       <div><span>holders</span><b>${num(l.holderCount)}</b></div>
       <div><span>buyers 1h</span><b>${num(l.buyersLast1h)}</b></div>
     </div>
+    <div class=links>
+      <a class=lnk href="https://dexscreener.com/robinhood/${esc(l.tokenAddress)}" target="_blank" rel="noopener">
+        <span class=lnkico>📈</span> dexscreener <span class=arr>↗</span></a>
+      <a class=lnk href='${(PADSITE[l.launchpad]||PADSITE['pools.trade'])(esc(l.tokenAddress))}' target="_blank" rel="noopener">
+        ${padLogo(l.launchpad)} ${esc(l.launchpad||'launchpad')} <span class=arr>↗</span></a>
+    </div>
     <div class=meta>CA ${esc(l.tokenAddress)} <button class=copy onclick="navigator.clipboard.writeText('${esc(l.tokenAddress)}')">⧉</button><br>
     dev <span class=addr data-dev="1" style="cursor:pointer" onclick="openCreator('${esc(l.creatorAddress||'')}')">${esc(l.creatorAddress||'—')}</span>
-    ${xh?` · <a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener">@${esc(xh)}</a>`:''}
-    · <a href="${l.launchpad==='noxa'?`https://noxa.io/token/${esc(l.tokenAddress)}`:`https://pools.trade/t/${esc(l.tokenAddress)}`}" target="_blank" rel="noopener">${esc(l.launchpad||'pools.trade')} ↗</a></div>
+    ${xh?` · <a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener">@${esc(xh)}</a>`:''}</div>
   </div>
   <div class=card>
     <div class=sec>🧾 creator rap sheet — wallet</div>

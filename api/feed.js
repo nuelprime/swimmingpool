@@ -17,6 +17,7 @@ const KNOWN_FACTORY = new Set(Object.keys(FACTORIES));
 import { cachedTags, resolveTags, rawFactories } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons } from '../lib/holders.js';
+import { cachedDevs } from '../lib/devs.js';
 
 // Single source of truth for the payload shape. FILLABLE = everything except identity fields
 // (which must never be overwritten) and derived ones (resolved later in the pipeline).
@@ -185,6 +186,17 @@ export default async function handler(req, res) {
     // icons from the same cache — fills pools.trade's missing logos
     const icons = await cachedIcons(launches.map(l => l.ca));
     for (const l of launches) { if (!l.imageUrl) { const u = icons.get(l.ca.toLowerCase()); if (u) l.imageUrl = u; } }
+
+    // dev wallets for factory-deployed tokens (resolved from the creation tx by the indexer)
+    const devs = await cachedDevs(launches.map(l => l.ca));
+    const needDev = [];
+    for (const l of launches) {
+      if (!l.creator) {
+        const d = devs.get(l.ca.toLowerCase());
+        if (d) l.creator = d; else needDev.push(l.ca.toLowerCase());
+      }
+    }
+    if (needDev.length) await redis(['SET', 'need:devs', JSON.stringify(needDev.slice(0, 400)), 'EX', '3600']);
 
     const stillMissing = [];
     for (const l of launches) {
