@@ -14,7 +14,7 @@ import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
 import { cachedTags, resolveTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
-import { cachedHolders, resolveHolders, cachedIcons } from '../lib/holders.js';
+import { cachedHolders, cachedIcons } from '../lib/holders.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 // gecko first: one API covering every pool on the chain with accurate market cap, volume,
@@ -26,7 +26,7 @@ import { cachedHolders, resolveHolders, cachedIcons } from '../lib/holders.js';
 // Removing pons here previously wiped pons from the feed entirely: gecko covers pons tokens'
 // prices but has no idea they're pons.
 const ADAPTERS = [gecko, pools, noxa, pons];
-const TTL = 60;
+const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -41,13 +41,10 @@ async function redis(cmd) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
+  res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');
 
-  const cached = await redis(['GET', 'feed:v6']);
-  if (cached) {
-    res.setHeader('X-Cache', 'hit');
-    return res.status(200).json(JSON.parse(cached));
-  }
+  const cached = await redis(['GET', 'feed:v5']);
+  if (cached) { res.setHeader('X-Cache', 'hit'); return res.status(200).json(JSON.parse(cached)); }
 
   // 1) every hood's adapter, in parallel — one failing never sinks the feed
   const results = await Promise.allSettled(ADAPTERS.map(a => a.fetchFeed()));
@@ -85,11 +82,8 @@ export default async function handler(req, res) {
     // identify them. Resolving the top-by-mcap inline means TOP gets labelled within a couple of
     // page loads instead of waiting on the background cron. Results cache forever.
     try {
-      const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 80);
-      await Promise.all([
-        resolveTags(byCap.map(l => l.ca), 25),
-        resolveHolders(byCap.map(l => l.ca), 20),
-      ]);
+      const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 60);
+      await resolveTags(byCap.map(l => l.ca), 15);
     } catch {}
 
     // PRIMARY tag source: the chain index, built from factory logs (~50 tokens per request —
@@ -224,19 +218,32 @@ export default async function handler(req, res) {
     if (hset.length > 2) await redis(hset);
   }
 
-  // === STABLE SORT + KEEP A GOOD SET ===
+  // DETERMINISTIC ORDER — sort by market cap with 24h volume as tie-break. The frontend does its
+  // own column sorting, so this mainly guarantees a stable payload: identical input produces an
+  // identical order, and the eager tag-resolution slice below always picks the same tokens.
   launches.sort((a, b) => {
     const m = (b.mcapUsd || 0) - (a.mcapUsd || 0);
-    if (Math.abs(m) > 500) return m;
-    return (b.volUsd || 0) - (a.volUsd || 0);
+    if (m !== 0) return m;
+    const v = (b.volUsd || 0) - (a.volUsd || 0);
+    if (v !== 0) return v;
+    return a.ca.localeCompare(b.ca);        // final tie-break so order never wobbles
   });
 
-  const finalLaunches = launches.slice(0, 400);
+  // SLIM THE PAYLOAD — strip internal bookkeeping (_pool, _factory, _fromChain, dexed…) and
+  // fields the frontend never reads. 700+ tokens was ~420KB, most of it dead weight on mobile.
+  const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website',
+                'mcapUsd','volUsd','liqUsd','change24h','holders','buyers1h','createdAt',
+                'status','imageUrl','imageEmoji','imageHue','description','graduationPct','xVerified'];
+  const slim = launches.map(l => {
+    const o = {};
+    for (const k of KEEP) if (l[k] !== null && l[k] !== undefined) o[k] = l[k];
+    return o;
+  });
 
   const lastRun = await redis(['GET', 'idx:lastRun']);
   const payload = {
     at: Date.now(),
-    launches: finalLaunches,
+    launches: slim,
     byPad,
     indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,
     sources,
@@ -245,7 +252,7 @@ export default async function handler(req, res) {
     degraded,
   };
 
-  await redis(['SET', 'feed:v6', JSON.stringify(payload), 'EX', String(TTL)]);
+  await redis(['SET', 'feed:v5', JSON.stringify(payload), 'EX', String(TTL)]);
   res.setHeader('X-Cache', 'miss');
   return res.status(200).json(payload);
 }
