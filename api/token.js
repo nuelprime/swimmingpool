@@ -2,9 +2,10 @@
 // Routes to the launchpad adapter that owns the token (pad hint from the row; falls back to trying both).
 import * as pools from './adapters/pools.js';
 import * as noxa from './adapters/noxa.js';
+import * as pons from './adapters/pons.js';
 import { xHandle } from './adapters/_shape.js';
 
-const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa };
+const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons };
 const TTL = 120;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;

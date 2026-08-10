@@ -4,6 +4,7 @@
 
 import * as pools from './adapters/pools.js';
 import * as noxa from './adapters/noxa.js';
+import * as pons from './adapters/pons.js';
 
 const TTL = 120;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
       }
     }
     // 2) adapter history as a supplement (catches launches older than the index backfill)
-    for (const a of [pools, noxa]) {
+    for (const a of [pools, noxa, pons]) {
       try {
         const extra = await a.fetchByCreator(q);
         for (const r of extra) {

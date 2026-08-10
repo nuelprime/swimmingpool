@@ -1,13 +1,20 @@
-// GET /api/feed → tokens from the CHAIN INDEX (idx:tokens in Redis), tagged by launchpad,
-// enriched with market numbers. The chain decides what exists; launchpad APIs only fill numbers.
-// Falls back to live adapter reads if the index is empty (fresh deploy, indexer hasn't run yet).
+// GET /api/feed → ADAPTERS ARE THE SOURCE OF TRUTH. One adapter per launchpad ("hood"),
+// each returning real, displayable rows from the source that curates them best.
+// The chain index is used ONLY for two things it's genuinely good at:
+//   1. accurate per-creator launch totals (the xN badge)
+//   2. verifying/attributing which launchpad a token actually came from
+// It never injects blank rows into the feed. Quality first, coverage second.
 
 import * as pools from './adapters/pools.js';
 import * as noxa from './adapters/noxa.js';
-import { ethUsd, valid } from './adapters/_shape.js';
+import * as pons from './adapters/pons.js';
+import { valid } from './adapters/_shape.js';
 import { LAUNCHPADS } from './factories.js';
 
+// order matters: first adapter to claim a CA owns its launchpad tag
+const ADAPTERS = [pools, noxa, pons];
 const TTL = 30;
+
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -19,78 +26,67 @@ async function redis(cmd) {
   } catch { return null; }
 }
 
-// merge enrichment map (by ca) from a launchpad adapter feed
-async function enrichMap() {
-  const m = new Map();
-  const [p, n] = await Promise.allSettled([pools.fetchFeed(), noxa.fetchFeed()]);
-  for (const s of [p, n]) {
-    if (s.status !== 'fulfilled') continue;
-    for (const row of s.value) {
-      const k = row.ca.toLowerCase();
-      const prev = m.get(k);
-      if (!prev) { m.set(k, row); continue; }
-      // keep the first source's launchpad tag; fill only missing numbers/media from the later one
-      for (const f of ['mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','x','telegram','website','createdAt','sym','name']) {
-        if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
-      }
-      (prev.alsoOn ||= []).push(row.launchpad);
-    }
-  }
-  return m;
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');
 
-  const cached = await redis(['GET', 'feed:v3']);
+  const cached = await redis(['GET', 'feed:v4']);
   if (cached) { res.setHeader('X-Cache', 'hit'); return res.status(200).json(JSON.parse(cached)); }
 
-  // 1) source of truth: the chain index
-  const idxRaw = await redis(['HGETALL', 'idx:tokens']);
-  const indexed = [];
-  if (Array.isArray(idxRaw)) {
-    for (let i = 1; i < idxRaw.length; i += 2) { try { indexed.push(JSON.parse(idxRaw[i])); } catch {} }
+  // 1) every hood's adapter, in parallel — one failing never sinks the feed
+  const results = await Promise.allSettled(ADAPTERS.map(a => a.fetchFeed()));
+  const merged = new Map();
+  const sources = {};
+  results.forEach((s, i) => {
+    const name = ADAPTERS[i].id;
+    sources[name] = s.status === 'fulfilled' ? (s.value?.length || 0) : 'err';
+    if (s.status !== 'fulfilled') return;
+    for (const row of s.value) {
+      if (!valid(row) || !row.sym) continue;              // adapters already guarantee this; belt+braces
+      const k = row.ca.toLowerCase();
+      const prev = merged.get(k);
+      if (!prev) { merged.set(k, row); continue; }
+      // first adapter keeps the launchpad tag; later ones only fill genuine gaps
+      for (const f of ['mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','imageEmoji','imageHue','x','telegram','website','createdAt','name','status']) {
+        if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
+      }
+      if (!prev.alsoOn?.includes(row.launchpad)) (prev.alsoOn ||= []).push(row.launchpad);
+    }
+  });
+
+  const launches = [...merged.values()];
+  const degraded = results.some(s => s.status === 'rejected');
+
+  // 2) chain index → launchpad attribution fix-up + true creator counts (never adds rows)
+  let creatorCounts = {};
+  if (R_URL && R_TOK) {
+    const idxRaw = await redis(['HGETALL', 'idx:tokens']);
+    const byCa = new Map();
+    if (Array.isArray(idxRaw)) {
+      for (let i = 1; i < idxRaw.length; i += 2) {
+        try {
+          const t = JSON.parse(idxRaw[i]);
+          byCa.set(t.ca, t);
+          const d = (t.deployer || '').toLowerCase();
+          if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
+        } catch {}
+      }
+    }
+    // the factory that deployed a token is the authoritative launchpad — correct any mislabel
+    for (const l of launches) {
+      const t = byCa.get(l.ca.toLowerCase());
+      if (t?.launchpad && t.launchpad !== l.launchpad) {
+        if (!l.alsoOn?.includes(l.launchpad)) (l.alsoOn ||= []).push(l.launchpad);
+        l.launchpad = t.launchpad;
+      }
+      if (t?.deployer && !l.creator) l.creator = t.deployer;
+    }
   }
 
-  // 2) enrichment numbers from launchpad adapters (each fills its own; nobody's the crutch)
-  const enrich = await enrichMap();
-
-  let launches;
-  if (indexed.length) {
-    // chain-driven: every indexed token, tagged, numbers filled where available
-    launches = indexed.map(t => {
-      const e = enrich.get(t.ca) || {};
-      return {
-        ca: t.ca, launchpad: t.launchpad,
-        sym: e.sym || t.sym || null, name: e.name || t.name || null,
-        creator: t.deployer || e.creator || null,
-        x: e.x || null, telegram: e.telegram || null, website: e.website || null,
-        mcapUsd: e.mcapUsd ?? null, volUsd: e.volUsd ?? null, liqUsd: e.liqUsd ?? null,
-        change24h: e.change24h ?? null, holders: e.holders ?? null,
-        createdAt: t.ts || e.createdAt || null,
-        status: e.status || null, imageUrl: e.imageUrl || null, imageHue: e.imageHue ?? null,
-        pool: t.pool || null,
-      };
-    });
-  } else {
-    // fallback: indexer hasn't populated yet → serve live adapter feed so the pool isn't empty
-    launches = [...enrich.values()];
-  }
-
-  // TRUE per-creator counts from the whole chain index (not just this page),
-  // so the feed's xN badge agrees with the dev page.
-  const creatorCounts = {};
-  for (const t of indexed) {
-    const d = (t.deployer || '').toLowerCase();
-    if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
-  }
-
-  // launchpad tally for the filter UI
   const byPad = {};
   for (const l of launches) byPad[l.launchpad || 'unknown'] = (byPad[l.launchpad || 'unknown'] || 0) + 1;
 
-  // ENS for creators (memoized)
+  // 3) ENS for creators (memoized 30d)
   if (R_URL && R_TOK && launches.length) {
     const creators = [...new Set(launches.map(l => (l.creator || '').toLowerCase()).filter(Boolean))];
     if (creators.length) {
@@ -109,7 +105,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // maintain the enriched socials map so X-handle cross-reference works (chain index has no socials)
+  // 4) socials map for the X-handle cross-reference
   if (R_URL && R_TOK && launches.length) {
     const hset = ['HSET', 'seen:v2'];
     for (const l of launches) {
@@ -119,18 +115,17 @@ export default async function handler(req, res) {
     if (hset.length > 2) await redis(hset);
   }
 
-  const lastRun = await redis(['GET', 'idx:lastRun']);
   const payload = {
     at: Date.now(),
-    launches: launches.filter(l => valid(l)),
+    launches,
     byPad,
+    sources,
     creatorCounts: Object.keys(creatorCounts).length ? creatorCounts : null,
     launchpads: LAUNCHPADS,
-    indexed: indexed.length,
-    indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,
+    degraded,
   };
 
-  await redis(['SET', 'feed:v3', JSON.stringify(payload), 'EX', String(TTL)]);
+  await redis(['SET', 'feed:v4', JSON.stringify(payload), 'EX', String(TTL)]);
   res.setHeader('X-Cache', 'miss');
   return res.status(200).json(payload);
 }

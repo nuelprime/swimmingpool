@@ -105,6 +105,30 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     if (res.newestBlock > last) await redis(['SET', cursorKey, String(res.newestBlock)]);
     summary[cfg.launchpad] = res.tokens.length;
   }
+  // PROGRESSIVE IDENTITY BACKFILL — name tokens already in the index that still lack a symbol,
+  // so the feed's quality gate lets more of them through each tick instead of them sitting unrenderable.
+  try {
+    const all = await redis(['HGETALL', 'idx:tokens']);
+    const need = [];
+    if (Array.isArray(all)) {
+      for (let i = 1; i < all.length; i += 2) {
+        try { const t = JSON.parse(all[i]); if (!t.sym) need.push(t); } catch {}
+      }
+    }
+    const batch = need.slice(0, 30);
+    if (batch.length) {
+      await Promise.all(batch.map(async t => {
+        const id = await tokenIdentity(t.ca);
+        if (id.symbol) { t.sym = id.symbol; t.name = id.name; }
+      }));
+      const hset = ['HSET', 'idx:tokens'];
+      for (const t of batch) if (t.sym) hset.push(t.ca, JSON.stringify(t));
+      if (hset.length > 2) await redis(hset);
+      summary._named = hset.length > 2 ? (hset.length - 2) / 2 : 0;
+      summary._stillUnnamed = need.length - batch.filter(t => t.sym).length;
+    }
+  } catch {}
+
   // stamp last run
   await redis(['SET', 'idx:lastRun', String(Date.now())]);
   return summary;
