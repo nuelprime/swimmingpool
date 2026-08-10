@@ -54,14 +54,23 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
       if (!ca) { for (const k of TOKEN_PARAMS) { if (p[k]) { ca = p[k]; break; } } }
       ca = String(ca).toLowerCase();
       if (!/^0x[0-9a-f]{40}$/.test(ca)) continue;
-      tokens.push({
+      const rec = {
         ca,
         launchpad: cfg.launchpad,
         deployer: String(p.deployer||'').toLowerCase() || null,
         pool: String(p.pool||'').toLowerCase() || null,
+        pairToken: String(p.pairToken||'').toLowerCase() || null,
         block: blk,
         ts: ev.block_timestamp ? new Date(ev.block_timestamp).getTime() : null,
-      });
+      };
+      // pons (and others) emit both TokenLaunched (carries pool/pairToken) and TokenDeployed
+      // (does not) for the same token. Merge so a later, thinner event can't wipe the pool.
+      const seenIdx = tokens.findIndex(t => t.ca === ca);
+      if (seenIdx === -1) tokens.push(rec);
+      else {
+        const cur = tokens[seenIdx];
+        for (const k of ['deployer','pool','pairToken','ts','block']) if (cur[k] == null && rec[k] != null) cur[k] = rec[k];
+      }
     }
     params = d.next_page_params;
     pages++;
@@ -99,8 +108,19 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         const id = await tokenIdentity(t.ca);
         t.name = id.name; t.sym = id.symbol;
       }));
+      // merge with existing stored records so we never regress a known pool/pairToken/symbol
+      const existing = await redis(['HMGET', 'idx:tokens', ...res.tokens.map(t => t.ca)]);
       const hset = ['HSET', 'idx:tokens'];
-      for (const t of res.tokens) hset.push(t.ca, JSON.stringify(t));
+      res.tokens.forEach((t, i) => {
+        const prevRaw = Array.isArray(existing) ? existing[i] : null;
+        if (prevRaw) {
+          try {
+            const prev = JSON.parse(prevRaw);
+            for (const k of Object.keys(prev)) if (t[k] == null && prev[k] != null) t[k] = prev[k];
+          } catch {}
+        }
+        hset.push(t.ca, JSON.stringify(t));
+      });
       await redis(hset);
     }
     if (res.newestBlock > last) await redis(['SET', cursorKey, String(res.newestBlock)]);

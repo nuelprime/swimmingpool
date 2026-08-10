@@ -1,15 +1,14 @@
-// pons adapter. pons has no public data API (their /api/noxa-market route is 410 Gone),
-// so this adapter sources tokens from the chain index (factory events) and enriches them
-// ON-CHAIN: identity from the token contract, price/liquidity from its pool reserves.
+// pons adapter. pons has no public data API, so this reads everything from the chain:
+// tokens + pool + pairToken come from the factory event (chain index), and market data
+// comes from the pool itself via the on-chain reader.
 //
-// Same quality bar as the API-backed adapters: if a token can't produce a symbol AND
-// real numbers, it isn't returned. No blank rows.
+// Same quality bar as API-backed adapters: no symbol or no real numbers → no row.
 
 import { ethUsd, valid } from './_shape.js';
-import { poolPrice, tokenIdentity } from '../onchain.js';
+import { marketData, tokenIdentity } from '../onchain.js';
 
-// pons factory VERIFIED: PonsLaunchFactory (traced from PonsLauncherToken).
-const PONS_FACTORY = '0xa5aab3f0c6eeadf30ef1d3eb997108e976351feb';
+export const PONS_FACTORY = '0xa5aab3f0c6eeadf30ef1d3eb997108e976351feb';
+
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -21,59 +20,48 @@ async function redis(cmd) {
   } catch { return null; }
 }
 
-// read the chain-indexed pons tokens, newest first
-async function indexedPons(limit = 60) {
+async function indexedPons(limit = 40) {
   const all = await redis(['HGETALL', 'idx:tokens']);
   const out = [];
   if (Array.isArray(all)) {
     for (let i = 1; i < all.length; i += 2) {
-      try { const t = JSON.parse(all[i]); if (t.launchpad === 'pons') out.push(t); } catch {}
+      try { const t = JSON.parse(all[i]); if (t.launchpad === 'pons' && t.pool) out.push(t); } catch {}
     }
   }
   out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
   return out.slice(0, limit);
 }
 
-// enrich one token fully on-chain; returns null if it can't meet the quality bar
-async function enrich(t, px) {
+async function toRow(t, px) {
   let sym = t.sym, name = t.name;
   if (!sym) { const id = await tokenIdentity(t.ca); sym = id.symbol; name = id.name; }
-  if (!sym) return null;                       // no identity → not displayable
+  if (!sym) return null;
 
-  const p = t.pool ? await poolPrice(t.pool, t.ca) : null;
-  const liqUsd = p ? p.liqNative * px : null;
-  // mcap needs supply; most launchpad tokens are 1e9 — derive from price when we have it
-  const mcapUsd = p ? p.priceNative * px * 1e9 : null;
-
-  // QUALITY BAR: these tokens graduate to Uniswap V4 (singleton PoolManager), so V2-style
-  // reserve reads return nothing. Without real numbers we do NOT emit a row — the feed's
-  // launchpad tag fix-up covers pons tokens using market data from adapters that have it.
-  if (mcapUsd == null && liqUsd == null) return null;
+  const md = await marketData({ token: t.ca, pool: t.pool, pairToken: t.pairToken }, px);
+  if (!md) return null;                       // no real market → no row
 
   return {
     ca: t.ca, sym, name: name || sym,
     launchpad: 'pons',
     creator: t.deployer || null,
     x: null, telegram: null, website: null,
-    mcapUsd, volUsd: null, liqUsd,
-    change24h: null, holders: null,
+    mcapUsd: md.mcapUsd, volUsd: null, liqUsd: md.liqUsd,
+    change24h: null, holders: null, buyers1h: null,
     createdAt: t.ts || null,
     status: null, imageUrl: null, imageEmoji: null, imageHue: null,
-    spark: null, _pool: t.pool || null,
+    spark: null, _pool: t.pool,
   };
 }
 
 export async function fetchFeed() {
-  if (!PONS_FACTORY) return [];
-  if (!R_URL || !R_TOK) return [];             // no index without Redis
+  if (!R_URL || !R_TOK) return [];
   const px = await ethUsd();
-  const raw = await indexedPons(60);
+  const raw = await indexedPons(40);
   if (!raw.length) return [];
-  // bounded concurrency — these are RPC reads
   const out = [];
-  const chunk = 10;
+  const chunk = 8;                             // bounded — these are RPC reads
   for (let i = 0; i < raw.length; i += chunk) {
-    const part = await Promise.all(raw.slice(i, i + chunk).map(t => enrich(t, px).catch(() => null)));
+    const part = await Promise.all(raw.slice(i, i + chunk).map(t => toRow(t, px).catch(() => null)));
     for (const r of part) if (r && valid(r)) out.push(r);
   }
   return out;
@@ -86,11 +74,16 @@ export async function fetchToken(ca) {
   try {
     const t = JSON.parse(rec);
     if (t.launchpad !== 'pons') return null;
-    return await enrich(t, await ethUsd());
+    return await toRow(t, await ethUsd());
   } catch { return null; }
 }
 
 export async function fetchByCreator(wallet) {
+  return byCreatorFromIndex(wallet, 'pons');
+}
+
+// shared: pull a wallet's launches for one launchpad out of the chain index
+export async function byCreatorFromIndex(wallet, launchpad) {
   if (!R_URL || !R_TOK) return [];
   const all = await redis(['HGETALL', 'idx:tokens']);
   const want = wallet.toLowerCase();
@@ -99,8 +92,8 @@ export async function fetchByCreator(wallet) {
     for (let i = 1; i < all.length; i += 2) {
       try {
         const t = JSON.parse(all[i]);
-        if (t.launchpad === 'pons' && (t.deployer || '').toLowerCase() === want && t.sym) {
-          out.push({ ca: t.ca, sym: t.sym, name: t.name, launchpad: 'pons', createdAt: t.ts, mcapUsd: null });
+        if ((!launchpad || t.launchpad === launchpad) && (t.deployer || '').toLowerCase() === want && t.sym) {
+          out.push({ ca: t.ca, sym: t.sym, name: t.name, launchpad: t.launchpad, createdAt: t.ts, mcapUsd: null });
         }
       } catch {}
     }
@@ -109,4 +102,3 @@ export async function fetchByCreator(wallet) {
 }
 
 export const id = 'pons';
-export const factory = PONS_FACTORY;

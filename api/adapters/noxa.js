@@ -82,9 +82,10 @@ export async function fetchToken(ca) {
 }
 
 export async function fetchByCreator(wallet) {
-  // noxa has no direct "by creator" list; use search-less scan is impractical.
-  // The seen-index in feed.js covers cross-adapter creator lookups instead.
-  return [];
+  // noxa's API has no by-creator endpoint, so read noxa launches out of the chain index
+  // (built from noxa's factory events). No longer a stub — this is why noxa devs showed 0.
+  const { byCreatorFromIndex } = await import('./pons.js');
+  return byCreatorFromIndex(wallet, 'noxa');
 }
 
 // chart data — the thing pools.trade never gave us
