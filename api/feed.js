@@ -9,6 +9,7 @@ import * as pools from '../lib/adapters/pools.js';
 import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
 import * as chain from '../lib/adapters/chain.js';
+import * as gecko from '../lib/adapters/gecko.js';
 import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
 import { cachedTags } from '../lib/tagger.js';
@@ -16,9 +17,13 @@ import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons } from '../lib/holders.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
-// chain first: its launchpad tags come from the deploying factory, so they win on merge,
-// and it's the only source that sees every pad (graduated pons, arena, unknown pads).
-const ADAPTERS = [chain, pools, noxa, pons];
+// gecko first: one API covering every pool on the chain with accurate market cap, volume,
+// liquidity, 24h change, real pool-creation timestamps and 1h buyer counts. The launchpad
+// adapters follow to supply what it lacks — holders, emoji art, X handles — and factory
+// attribution below assigns the authoritative launchpad tag.
+// pons + chain are retired from the feed: gecko already covers their tokens with better data.
+// pools.trade stays for holders/emoji/X handles, noxa for its logos.
+const ADAPTERS = [gecko, pools, noxa];
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -85,7 +90,8 @@ export default async function handler(req, res) {
         if (!l.alsoOn?.includes(l.launchpad)) (l.alsoOn ||= []).push(l.launchpad);
         l.launchpad = real;
       } else if (!real) {
-        l.padUnverified = true;   // not resolved yet; adapter's guess stands
+        l.padUnverified = true;              // tag cache hasn't reached it yet
+        if (!l.launchpad) l.launchpad = 'other';
       }
     }
     // true creator counts from the same index rows

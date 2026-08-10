@@ -162,7 +162,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const cas = [];
     if (Array.isArray(seen)) for (let i = 0; i < seen.length; i += 2) cas.push(seen[i]);
     if (cas.length) {
-      const t = await resolveTags(cas, 12);
+      const t = await resolveTags(cas, 60);
       summary._tagged = t.resolved;
       // resolve holders from the feed's targeted worklist (tokens genuinely missing them)
       let holdTargets = cas;
