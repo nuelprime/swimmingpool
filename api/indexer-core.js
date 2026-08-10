@@ -7,6 +7,7 @@
 import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from '../lib/factories.js';
 import { tokenIdentity } from '../lib/onchain.js';
 import { resolveTags } from '../lib/tagger.js';
+import { resolveHolders } from '../lib/holders.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -163,6 +164,13 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     if (cas.length) {
       const t = await resolveTags(cas, 12);
       summary._tagged = t.resolved;
+      // resolve holders from the feed's targeted worklist (tokens genuinely missing them)
+      let holdTargets = cas;
+      try {
+        const raw = await redis(['GET', 'need:holders']);
+        if (raw) { const list = JSON.parse(raw); if (Array.isArray(list) && list.length) holdTargets = list; }
+      } catch {}
+      summary._holders = await resolveHolders(holdTargets, 30);
       if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}

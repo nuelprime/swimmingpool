@@ -12,6 +12,7 @@ import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
 import { cachedTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
+import { cachedHolders } from '../lib/holders.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 const ADAPTERS = [pools, noxa, pons];
@@ -124,6 +125,38 @@ export default async function handler(req, res) {
     }
   } catch {}
 
+  // 2.6) HOLDERS — only pools.trade exposes them; Blockscout covers every pad. Cache-only read
+  // here so the feed never waits on network; the indexer fills the cache in the background.
+  try {
+    const hold = await cachedHolders(launches.map(l => l.ca));
+    const stillMissing = [];
+    for (const l of launches) {
+      if (l.holders == null) {
+        const h = hold.get(l.ca.toLowerCase());
+        if (h != null) l.holders = h; else stillMissing.push(l.ca.toLowerCase());
+      }
+    }
+    // hand the indexer a targeted worklist — otherwise it wastes its budget re-resolving
+    // tokens that already report holders via pools.trade
+    if (stillMissing.length) {
+      // interleave by launchpad — a flat list always starts at the same pad, so the others
+      // (pons especially) would never get their turn.
+      const byPadQ = new Map();
+      for (const l of launches) {
+        if (l.holders != null) continue;
+        const k = l.launchpad || 'unknown';
+        if (!byPadQ.has(k)) byPadQ.set(k, []);
+        byPadQ.get(k).push(l.ca.toLowerCase());
+      }
+      const queues = [...byPadQ.values()];
+      const fair = [];
+      for (let i = 0; fair.length < 400 && queues.some(q => q.length); i++) {
+        for (const q of queues) { if (q.length) fair.push(q.shift()); }
+      }
+      await redis(['SET', 'need:holders', JSON.stringify(fair), 'EX', '3600']);
+    }
+  } catch {}
+
   const byPad = {};
   for (const l of launches) byPad[l.launchpad || 'unknown'] = (byPad[l.launchpad || 'unknown'] || 0) + 1;
 
@@ -156,10 +189,12 @@ export default async function handler(req, res) {
     if (hset.length > 2) await redis(hset);
   }
 
+  const lastRun = await redis(['GET', 'idx:lastRun']);
   const payload = {
     at: Date.now(),
     launches,
     byPad,
+    indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,
     sources,
     creatorCounts: Object.keys(creatorCounts).length ? creatorCounts : null,
     launchpads: LAUNCHPADS,
