@@ -5,7 +5,7 @@
 //
 // GET /api/discover  → { known:[…], candidates:[{factory,count,name}] }
 
-import { FACTORIES, isKnown } from './factories.js';
+import { FACTORIES, isKnown } from '../lib/factories.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;

@@ -5,13 +5,13 @@
 //   2. verifying/attributing which launchpad a token actually came from
 // It never injects blank rows into the feed. Quality first, coverage second.
 
-import * as pools from './adapters/pools.js';
-import * as noxa from './adapters/noxa.js';
-import * as pons from './adapters/pons.js';
-import { valid } from './adapters/_shape.js';
-import { LAUNCHPADS } from './factories.js';
-import { cachedTags } from './tagger.js';
-import { enrich as dexEnrich } from './dex.js';
+import * as pools from '../lib/adapters/pools.js';
+import * as noxa from '../lib/adapters/noxa.js';
+import * as pons from '../lib/adapters/pons.js';
+import { valid } from '../lib/adapters/_shape.js';
+import { LAUNCHPADS } from '../lib/factories.js';
+import { cachedTags } from '../lib/tagger.js';
+import { enrich as dexEnrich } from '../lib/dex.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 const ADAPTERS = [pools, noxa, pons];
@@ -115,6 +115,11 @@ export default async function handler(req, res) {
       if (l.liqUsd == null && d.liqUsd != null) l.liqUsd = d.liqUsd;
       if (l.change24h == null && d.change24h != null) l.change24h = d.change24h;
       if (l.mcapUsd == null && d.mcapUsd != null) l.mcapUsd = d.mcapUsd;
+      // media + socials: pools.trade ships emoji rather than logos, pons/noxa lists have no X
+      if (!l.imageUrl && d.imageUrl) l.imageUrl = d.imageUrl;
+      if (!l.x && d.x) { const m = String(d.x).match(/(?:x|twitter)\.com\/(@?[A-Za-z0-9_]{1,15})/i); if (m) l.x = m[1].replace('@',''); }
+      if (!l.telegram && d.telegram) l.telegram = d.telegram;
+      if (!l.website && d.website) l.website = d.website;
       l.dexed = true;
     }
   } catch {}

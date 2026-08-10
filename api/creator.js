@@ -2,9 +2,9 @@
 // Source of truth is the chain index (idx:tokens), so the count matches what the feed badge shows
 // and covers every launchpad — not just pools.trade like the old version did.
 
-import * as pools from './adapters/pools.js';
-import * as noxa from './adapters/noxa.js';
-import * as pons from './adapters/pons.js';
+import * as pools from '../lib/adapters/pools.js';
+import * as noxa from '../lib/adapters/noxa.js';
+import * as pons from '../lib/adapters/pons.js';
 
 const TTL = 120;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;

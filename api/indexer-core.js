@@ -4,9 +4,9 @@
 // Runs incrementally from cron: each tick reads events newer than the last cursor per factory.
 // First run backfills a bounded window so the pool isn't empty.
 
-import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from './factories.js';
-import { tokenIdentity } from './onchain.js';
-import { resolveTags } from './tagger.js';
+import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from '../lib/factories.js';
+import { tokenIdentity } from '../lib/onchain.js';
+import { resolveTags } from '../lib/tagger.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;

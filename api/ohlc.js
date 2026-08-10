@@ -1,6 +1,6 @@
 // GET /api/ohlc?ca=0x…  → { candles:[{t,o,h,l,c,v}], swaps:[…] } for the live chart.
 // noxa-only (it's the source that exposes candles). Cached 20s.
-import * as noxa from './adapters/noxa.js';
+import * as noxa from '../lib/adapters/noxa.js';
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;

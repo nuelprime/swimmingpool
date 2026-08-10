@@ -1,9 +1,9 @@
 // GET /api/token?ca=0x…&pad=noxa  → token detail + creator rap sheet (wallet + X cross-ref).
 // Routes to the launchpad adapter that owns the token (pad hint from the row; falls back to trying both).
-import * as pools from './adapters/pools.js';
-import * as noxa from './adapters/noxa.js';
-import * as pons from './adapters/pons.js';
-import { xHandle } from './adapters/_shape.js';
+import * as pools from '../lib/adapters/pools.js';
+import * as noxa from '../lib/adapters/noxa.js';
+import * as pons from '../lib/adapters/pons.js';
+import { xHandle } from '../lib/adapters/_shape.js';
 
 const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons };
 const TTL = 120;
