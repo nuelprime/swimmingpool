@@ -115,10 +115,13 @@ export default async function handler(req, res) {
     for (const l of launches) {
       const d = dex.get(l.ca.toLowerCase());
       if (!d) continue;
-      if (l.volUsd == null && d.volUsd != null) l.volUsd = d.volUsd;
-      if (l.liqUsd == null && d.liqUsd != null) l.liqUsd = d.liqUsd;
-      if (l.change24h == null && d.change24h != null) l.change24h = d.change24h;
-      if (l.mcapUsd == null && d.mcapUsd != null) l.mcapUsd = d.mcapUsd;
+      // dexscreener reads live pool state, so it OVERRIDES rather than merely fills. Blockscout's
+      // circulating_market_cap goes stale (it reported arena's BOYZ at $1.56M vs an actual $350K).
+      if (d.volUsd != null) l.volUsd = d.volUsd;
+      if (d.liqUsd != null) l.liqUsd = d.liqUsd;
+      if (d.change24h != null) l.change24h = d.change24h;
+      if (d.mcapUsd != null) l.mcapUsd = d.mcapUsd;
+      else if (l._fromChain) l.mcapUsd = l.mcapUsd;   // no dex pool → keep chain value as-is
       // media + socials: pools.trade ships emoji rather than logos, pons/noxa lists have no X
       if (!l.imageUrl && d.imageUrl) l.imageUrl = d.imageUrl;
       if (!l.x && d.x) { const m = String(d.x).match(/(?:x|twitter)\.com\/(@?[A-Za-z0-9_]{1,15})/i); if (m) l.x = m[1].replace('@',''); }
