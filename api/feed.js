@@ -11,6 +11,7 @@ import * as pons from './adapters/pons.js';
 import { valid } from './adapters/_shape.js';
 import { LAUNCHPADS } from './factories.js';
 import { cachedTags } from './tagger.js';
+import { enrich as dexEnrich } from './dex.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 const ADAPTERS = [pools, noxa, pons];
@@ -101,6 +102,22 @@ export default async function handler(req, res) {
       }
     }
   }
+
+  // 2.5) DEXSCREENER FILL — universal market data. Each launchpad's API leaves different
+  // holes (pons has no volume, noxa has no 24h change); dexscreener indexes every pool on the
+  // chain, so one pass fills them all consistently.
+  try {
+    const dex = await dexEnrich(launches.map(l => l.ca), { max: 600 });
+    for (const l of launches) {
+      const d = dex.get(l.ca.toLowerCase());
+      if (!d) continue;
+      if (l.volUsd == null && d.volUsd != null) l.volUsd = d.volUsd;
+      if (l.liqUsd == null && d.liqUsd != null) l.liqUsd = d.liqUsd;
+      if (l.change24h == null && d.change24h != null) l.change24h = d.change24h;
+      if (l.mcapUsd == null && d.mcapUsd != null) l.mcapUsd = d.mcapUsd;
+      l.dexed = true;
+    }
+  } catch {}
 
   const byPad = {};
   for (const l of launches) byPad[l.launchpad || 'unknown'] = (byPad[l.launchpad || 'unknown'] || 0) + 1;
