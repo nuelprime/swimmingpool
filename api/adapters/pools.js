@@ -29,6 +29,7 @@ function norm(l) {
     liqUsd: ps.liquidityUsd ?? null,
     change24h: ps.priceChange24hPct ?? null,
     holders: l.holderCount ?? null,
+    buyers1h: l.buyersLast1h ?? null,
     createdAt: l.createdAt ? new Date(l.createdAt).getTime() : null,
     status: l.status || null,
     imageUrl: (l.imageUrl && /^https:/.test(l.imageUrl)) ? l.imageUrl : null,

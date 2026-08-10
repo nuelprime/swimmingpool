@@ -300,6 +300,7 @@ function adapt(r){
     r.fdvUsd = r.mcapUsd; r.creatorAddress = r.creator;
     r.xUrl = r.x ? `https://x.com/${r.x}` : null;
     r.holderCount = r.holders; r.websiteUrl = r.website;
+    r.buyersLast1h = r.buyers1h ?? r.buyersLast1h ?? null;
     r.poolStats = { volume24hUsd:r.volUsd, liquidityUsd:r.liqUsd, priceChange24hPct:r.change24h, priceChange1hPct:null };
   }
   return r;

@@ -8,7 +8,9 @@
 import { ethUsd, valid } from './_shape.js';
 import { poolPrice, tokenIdentity } from '../onchain.js';
 
-const PONS_FACTORY = '0xd9ec2db5f3d1b236843925949fe5bd8a3836fccb';
+// pons's factory is NOT yet identified (see factories.js). Until it is, this adapter
+// returns nothing rather than claiming tokens that belong to another launchpad.
+const PONS_FACTORY = null;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -63,6 +65,7 @@ async function enrich(t, px) {
 }
 
 export async function fetchFeed() {
+  if (!PONS_FACTORY) return [];
   if (!R_URL || !R_TOK) return [];             // no index without Redis
   const px = await ethUsd();
   const raw = await indexedPons(60);

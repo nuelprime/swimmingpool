@@ -5,6 +5,16 @@ import { ethUsd, xHandle, valid } from './_shape.js';
 const BASE = 'https://indexer.noxa.io/v1/robinhood';
 const IMG = 'https://indexer.noxa.io'; // logo paths are relative: /uploads/…
 
+// noxa serves logos as ipfs:// URIs (and sometimes relative /uploads paths). Normalise both.
+function logoUrl(logo) {
+  if (!logo) return null;
+  const v = String(logo);
+  if (v.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + v.slice(7).replace(/^ipfs\//, '');
+  if (v.startsWith('http')) return v;
+  if (v.startsWith('/')) return IMG + v;
+  return null;
+}
+
 async function j(path) {
   const r = await fetch(BASE + path, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(9000) });
   if (!r.ok) throw new Error(`noxa ${path} ${r.status}`);
@@ -28,10 +38,11 @@ function norm(t, px) {
     volUsd: vol,
     liqUsd: null,                        // noxa doesn't expose pool liq directly in list; drawer can derive
     change24h: null,                     // not in list payload; OHLC gives it on the token page
-    holders: null,                       // fetched lazily on token page
+    holders: null,                       // not in noxa list payload
+    buyers1h: null,                      // not in noxa list payload
     createdAt: t.createdAtTime ?? null,  // already ms epoch
     status: t.restrictionsEndBlock ? 'restricted' : 'live',
-    imageUrl: t.logo ? (t.logo.startsWith('http') ? t.logo : IMG + t.logo) : null,
+    imageUrl: logoUrl(t.logo),
     imageEmoji: null,
     imageHue: null,
     spark: null,

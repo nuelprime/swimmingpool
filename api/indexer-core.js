@@ -6,6 +6,7 @@
 
 import { FACTORIES, launchpadOf, TOKEN_PARAMS, LAUNCH_EVENTS } from './factories.js';
 import { tokenIdentity } from './onchain.js';
+import { resolveTags } from './tagger.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -126,6 +127,19 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
       if (hset.length > 2) await redis(hset);
       summary._named = hset.length > 2 ? (hset.length - 2) / 2 : 0;
       summary._stillUnnamed = need.length - batch.filter(t => t.sym).length;
+    }
+  } catch {}
+
+  // TAG RESOLUTION — give the launchpad tag cache a push each run using whatever the
+  // feed most recently served (seen:v2). One Blockscout call per token, cached forever.
+  try {
+    const seen = await redis(['HGETALL', 'seen:v2']);
+    const cas = [];
+    if (Array.isArray(seen)) for (let i = 0; i < seen.length; i += 2) cas.push(seen[i]);
+    if (cas.length) {
+      const t = await resolveTags(cas, 40);
+      summary._tagged = t.resolved;
+      if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}
 

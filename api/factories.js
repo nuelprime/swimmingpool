@@ -16,19 +16,22 @@ export const FACTORIES = {
     launchpad: 'noxa', tokenParam: 'token',
     site: (ca) => `https://noxa.io/token/${ca}`,
   },
-  // second TokenLaunched/TokenDeployed factory found on-chain (unverified brand).
-  // Emits the same interface as noxa's LaunchFactory. Labelled distinctly until confirmed.
+  // noxa's second factory. Emits the SAME TokenLaunched/TokenDeployed interface as the
+  // verified LaunchFactory above (same codebase), and noxa's API holds full metadata for
+  // its tokens — including CASHCAT/TENDIES. Previously mislabelled as pons on a guess.
   '0xd9ec2db5f3d1b236843925949fe5bd8a3836fccb': {
-    launchpad: 'pons', tokenParam: 'token',
-    site: (ca) => `https://ponsfamily.com/token/${ca}`,
-    unverified: true,
+    launchpad: 'noxa', tokenParam: 'token',
+    site: (ca) => `https://noxa.io/token/${ca}`,
   },
+  // pons — NOT YET IDENTIFIED. pons has no public API and no factory traced to it.
+  // To add: take any token launched on ponsfamily.com, look up its creator contract on
+  // Blockscout, and register that address here. Do not guess.
+
 };
 
 export const LAUNCHPADS = {
   'noxa':        { label: 'noxa' },
   'pools.trade': { label: 'pools.trade' },
-  'pons':        { label: 'pons' },
 };
 
 // token-creation event names we recognise across launchpads

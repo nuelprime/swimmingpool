@@ -10,6 +10,7 @@ import * as noxa from './adapters/noxa.js';
 import * as pons from './adapters/pons.js';
 import { valid } from './adapters/_shape.js';
 import { LAUNCHPADS } from './factories.js';
+import { cachedTags } from './tagger.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 const ADAPTERS = [pools, noxa, pons];
@@ -57,29 +58,38 @@ export default async function handler(req, res) {
   const launches = [...merged.values()];
   const degraded = results.some(s => s.status === 'rejected');
 
-  // 2) chain index → launchpad attribution fix-up + true creator counts (never adds rows)
+  // 2) AUTHORITATIVE LAUNCHPAD TAG — the factory that deployed the contract, from the
+  // tag cache (resolved once per token, cached forever). Adapters over-claim because
+  // noxa/pools index the whole chain; only the factory is truth.
   let creatorCounts = {};
   if (R_URL && R_TOK) {
+    const tags = await cachedTags(launches.map(l => l.ca));
+    for (const l of launches) {
+      const real = tags.get(l.ca.toLowerCase());
+      if (real && real !== l.launchpad) {
+        if (!l.alsoOn?.includes(l.launchpad)) (l.alsoOn ||= []).push(l.launchpad);
+        l.launchpad = real;
+      } else if (!real) {
+        l.padUnverified = true;   // not resolved yet; adapter's guess stands
+      }
+    }
+    // true creator counts from the chain index
     const idxRaw = await redis(['HGETALL', 'idx:tokens']);
-    const byCa = new Map();
     if (Array.isArray(idxRaw)) {
       for (let i = 1; i < idxRaw.length; i += 2) {
         try {
           const t = JSON.parse(idxRaw[i]);
-          byCa.set(t.ca, t);
           const d = (t.deployer || '').toLowerCase();
           if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
         } catch {}
       }
     }
-    // the factory that deployed a token is the authoritative launchpad — correct any mislabel
+    // supplement counts with adapter-known creators so xN isn't blank pre-backfill
     for (const l of launches) {
-      const t = byCa.get(l.ca.toLowerCase());
-      if (t?.launchpad && t.launchpad !== l.launchpad) {
-        if (!l.alsoOn?.includes(l.launchpad)) (l.alsoOn ||= []).push(l.launchpad);
-        l.launchpad = t.launchpad;
+      const c = (l.creator || '').toLowerCase();
+      if (c && !creatorCounts[c]) {
+        creatorCounts[c] = launches.filter(x => (x.creator || '').toLowerCase() === c).length;
       }
-      if (t?.deployer && !l.creator) l.creator = t.deployer;
     }
   }
 
