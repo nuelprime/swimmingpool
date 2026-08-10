@@ -23,15 +23,36 @@ export const FACTORIES = {
     launchpad: 'noxa', tokenParam: 'token',
     site: (ca) => `https://noxa.io/token/${ca}`,
   },
-  // pons — NOT YET IDENTIFIED. pons has no public API and no factory traced to it.
-  // To add: take any token launched on ponsfamily.com, look up its creator contract on
-  // Blockscout, and register that address here. Do not guess.
+  // pons — VERIFIED. Traced from token 0x7FE995a8…CD87f ("PonsLauncherToken");
+  // creator contract is named PonsLaunchFactory on Blockscout.
+  '0xa5aab3f0c6eeadf30ef1d3eb997108e976351feb': {
+    launchpad: 'pons', tokenParam: 'token',
+    site: (ca) => `https://ponsfamily.com/token/${ca}`,
+  },
+  // arena — VERIFIED. Traced from token 0x49d8022c…b926 ("RobinhoodLaunchToken");
+  // creator contract is named RobinhoodLaunchTokenFactory.
+  '0x4ec0d15bc8d2f5a7eb4d14e789c92c7f7b96425d': {
+    launchpad: 'arena', tokenParam: 'token',
+    site: (ca) => `https://arena.social/token/${ca}`,
+  },
+  // bankr — VERIFIED via token 0xc2362aff…4ba3 ("GameStop"), creator contract
+  // DopplerERC20V1Factory. CAVEAT: Doppler is Uniswap's V4 launch protocol, so this factory
+  // may be shared by other Doppler-based front-ends — a token tagged 'bankr' could have been
+  // launched through a different UI on the same infrastructure.
+  '0x1b37d3a72082029c44b35b604ea473617580b69a': {
+    launchpad: 'bankr', tokenParam: 'token',
+    site: (ca) => `https://bankr.bot/token/${ca}`,
+    sharedInfra: 'doppler',
+  },
 
 };
 
 export const LAUNCHPADS = {
   'noxa':        { label: 'noxa' },
   'pools.trade': { label: 'pools.trade' },
+  'pons':        { label: 'pons' },
+  'arena':       { label: 'arena' },
+  'bankr':       { label: 'bankr' },
 };
 
 // token-creation event names we recognise across launchpads

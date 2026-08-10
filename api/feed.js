@@ -63,9 +63,19 @@ export default async function handler(req, res) {
   // noxa/pools index the whole chain; only the factory is truth.
   let creatorCounts = {};
   if (R_URL && R_TOK) {
+    // PRIMARY tag source: the chain index, built from factory logs (~50 tokens per request —
+    // vastly cheaper than per-token lookups, which Blockscout rate-limits).
+    const idxTags = new Map();
+    const idxRows = await redis(['HGETALL', 'idx:tokens']);
+    if (Array.isArray(idxRows)) {
+      for (let i = 1; i < idxRows.length; i += 2) {
+        try { const t = JSON.parse(idxRows[i]); if (t.launchpad) idxTags.set(t.ca, t.launchpad); } catch {}
+      }
+    }
+    // FALLBACK: per-token factory cache, for anything the index hasn't reached yet.
     const tags = await cachedTags(launches.map(l => l.ca));
     for (const l of launches) {
-      const real = tags.get(l.ca.toLowerCase());
+      const real = idxTags.get(l.ca.toLowerCase()) || tags.get(l.ca.toLowerCase());
       if (real && real !== l.launchpad) {
         if (!l.alsoOn?.includes(l.launchpad)) (l.alsoOn ||= []).push(l.launchpad);
         l.launchpad = real;
@@ -73,12 +83,11 @@ export default async function handler(req, res) {
         l.padUnverified = true;   // not resolved yet; adapter's guess stands
       }
     }
-    // true creator counts from the chain index
-    const idxRaw = await redis(['HGETALL', 'idx:tokens']);
-    if (Array.isArray(idxRaw)) {
-      for (let i = 1; i < idxRaw.length; i += 2) {
+    // true creator counts from the same index rows
+    if (Array.isArray(idxRows)) {
+      for (let i = 1; i < idxRows.length; i += 2) {
         try {
-          const t = JSON.parse(idxRaw[i]);
+          const t = JSON.parse(idxRows[i]);
           const d = (t.deployer || '').toLowerCase();
           if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
         } catch {}

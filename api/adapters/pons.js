@@ -8,9 +8,8 @@
 import { ethUsd, valid } from './_shape.js';
 import { poolPrice, tokenIdentity } from '../onchain.js';
 
-// pons's factory is NOT yet identified (see factories.js). Until it is, this adapter
-// returns nothing rather than claiming tokens that belong to another launchpad.
-const PONS_FACTORY = null;
+// pons factory VERIFIED: PonsLaunchFactory (traced from PonsLauncherToken).
+const PONS_FACTORY = '0xa5aab3f0c6eeadf30ef1d3eb997108e976351feb';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
 
