@@ -3,9 +3,12 @@
 import * as pools from '../lib/adapters/pools.js';
 import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
+import * as gecko from '../lib/adapters/gecko.js';
 import { xHandle } from '../lib/adapters/_shape.js';
 
-const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons };
+// gecko included so a search can resolve ANY token on the chain, not just ones a launchpad API
+// happens to list. Without it, pasting a CA that only gecko knows returned 404 → dead drawer.
+const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons, 'gecko': gecko };
 const TTL = 120;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;

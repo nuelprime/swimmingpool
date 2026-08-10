@@ -219,7 +219,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 <div class="lanes">
   <button class="lane on" data-tab="new">NEW PAIRS</button>
   <button class="lane" data-tab="top">TOP</button>
-  <div class="search"><input id="q" placeholder="CA · dev wallet · @xhandle" spellcheck="false"></div>
+  <div class="search"><input id="q" placeholder="paste CA · dev wallet · @xhandle — press ↵" spellcheck="false"></div>
 </div>
 
 <button class="ftoggle" id="ftoggle">filters ▾</button>
@@ -451,7 +451,9 @@ function sparkline(cv, series){
 function setParam(k,val){ const u=new URL(location); ['ca','dev'].forEach(x=>u.searchParams.delete(x)); if(val) u.searchParams.set(k,val); history.replaceState(null,'',u); }
 async function openToken(ca){
   setParam('ca',ca);
-  const local = feed.launches.find(l=>l.tokenAddress===ca) || feed.auctions.map(fromAuction).find(l=>l.tokenAddress===ca);
+  // case-insensitive: a pasted CA is usually lowercase while the feed holds the checksummed form
+  const _k = ca.toLowerCase();
+  const local = feed.launches.find(l=>(l.tokenAddress||'').toLowerCase()===_k);
   drawer(tokenHTML(local, null));
   if (local?.poolPriceSeries?.length) sparkline($('spark'), local.poolPriceSeries);
   try{
@@ -574,11 +576,16 @@ $('ftoggle').onclick = () => {
   $('ftoggle').textContent = open ? 'filters ▴' : 'filters ▾';
 };
 $('reset').onclick=()=>{ $('filters').querySelectorAll('input').forEach(i=>i.type==='checkbox'?i.checked=false:i.value=''); render(); };
-$('q').addEventListener('keydown', e=>{
-  if(e.key!=='Enter') return;
+function runSearch(){
   const q = $('q').value.trim();
   if(!q) return;
   /^0x[0-9a-fA-F]{40}$/.test(q) ? openToken(q) : openCreator(q.replace(/^@/,''));
+}
+$('q').addEventListener('keydown', e=>{ if(e.key==='Enter') runSearch(); });
+// a pasted contract address is unambiguous — search it immediately rather than waiting for Enter
+$('q').addEventListener('paste', e=>{
+  const t=(e.clipboardData||window.clipboardData)?.getData('text')||'';
+  if(/^0x[0-9a-fA-F]{40}$/.test(t.trim())) setTimeout(runSearch, 30);
 });
 window.closeDrawer = closeDrawer; window.openToken = openToken; window.openCreator = openCreator;
 
