@@ -14,7 +14,7 @@ import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
 import { cachedTags, resolveTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
-import { cachedHolders, cachedIcons } from '../lib/holders.js';
+import { cachedHolders, resolveHolders, cachedIcons } from '../lib/holders.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
 // gecko first: one API covering every pool on the chain with accurate market cap, volume,
@@ -82,8 +82,11 @@ export default async function handler(req, res) {
     // identify them. Resolving the top-by-mcap inline means TOP gets labelled within a couple of
     // page loads instead of waiting on the background cron. Results cache forever.
     try {
-      const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 60);
-      await resolveTags(byCap.map(l => l.ca), 15);
+      const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 80);
+      await Promise.all([
+        resolveTags(byCap.map(l => l.ca), 40),          // was 15 → now 40
+        resolveHolders(byCap.map(l => l.ca), 40),       // force holders on top 40
+      ]);
     } catch {}
 
     // PRIMARY tag source: the chain index, built from factory logs (~50 tokens per request —
