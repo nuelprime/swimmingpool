@@ -26,7 +26,7 @@ import { cachedHolders, resolveHolders, cachedIcons } from '../lib/holders.js';
 // Removing pons here previously wiped pons from the feed entirely: gecko covers pons tokens'
 // prices but has no idea they're pons.
 const ADAPTERS = [gecko, pools, noxa, pons];
-const TTL = 30;
+const TTL = 60;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -41,10 +41,13 @@ async function redis(cmd) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');
+  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
 
-  const cached = await redis(['GET', 'feed:v4']);
-  if (cached) { res.setHeader('X-Cache', 'hit'); return res.status(200).json(JSON.parse(cached)); }
+  const cached = await redis(['GET', 'feed:v6']);
+  if (cached) {
+    res.setHeader('X-Cache', 'hit');
+    return res.status(200).json(JSON.parse(cached));
+  }
 
   // 1) every hood's adapter, in parallel — one failing never sinks the feed
   const results = await Promise.allSettled(ADAPTERS.map(a => a.fetchFeed()));
@@ -84,8 +87,8 @@ export default async function handler(req, res) {
     try {
       const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 80);
       await Promise.all([
-        resolveTags(byCap.map(l => l.ca), 40),          // was 15 → now 40
-        resolveHolders(byCap.map(l => l.ca), 40),       // force holders on top 40
+        resolveTags(byCap.map(l => l.ca), 25),
+        resolveHolders(byCap.map(l => l.ca), 20),
       ]);
     } catch {}
 
@@ -221,10 +224,19 @@ export default async function handler(req, res) {
     if (hset.length > 2) await redis(hset);
   }
 
+  // === STABLE SORT + KEEP A GOOD SET ===
+  launches.sort((a, b) => {
+    const m = (b.mcapUsd || 0) - (a.mcapUsd || 0);
+    if (Math.abs(m) > 500) return m;
+    return (b.volUsd || 0) - (a.volUsd || 0);
+  });
+
+  const finalLaunches = launches.slice(0, 400);
+
   const lastRun = await redis(['GET', 'idx:lastRun']);
   const payload = {
     at: Date.now(),
-    launches,
+    launches: finalLaunches,
     byPad,
     indexerLastRun: lastRun ? parseInt(lastRun, 10) : null,
     sources,
@@ -233,7 +245,7 @@ export default async function handler(req, res) {
     degraded,
   };
 
-  await redis(['SET', 'feed:v4', JSON.stringify(payload), 'EX', String(TTL)]);
+  await redis(['SET', 'feed:v6', JSON.stringify(payload), 'EX', String(TTL)]);
   res.setHeader('X-Cache', 'miss');
   return res.status(200).json(payload);
 }
