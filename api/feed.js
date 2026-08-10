@@ -12,7 +12,7 @@ import * as chain from '../lib/adapters/chain.js';
 import * as gecko from '../lib/adapters/gecko.js';
 import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
-import { cachedTags } from '../lib/tagger.js';
+import { cachedTags, resolveTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons } from '../lib/holders.js';
 
@@ -21,9 +21,11 @@ import { cachedHolders, cachedIcons } from '../lib/holders.js';
 // liquidity, 24h change, real pool-creation timestamps and 1h buyer counts. The launchpad
 // adapters follow to supply what it lacks — holders, emoji art, X handles — and factory
 // attribution below assigns the authoritative launchpad tag.
-// pons + chain are retired from the feed: gecko already covers their tokens with better data.
-// pools.trade stays for holders/emoji/X handles, noxa for its logos.
-const ADAPTERS = [gecko, pools, noxa];
+// gecko first for numbers (it sees every pool on the chain). The launchpad adapters follow to
+// supply what gecko cannot know — which pad a token came from, plus holders/emoji/X handles.
+// Removing pons here previously wiped pons from the feed entirely: gecko covers pons tokens'
+// prices but has no idea they're pons.
+const ADAPTERS = [gecko, pools, noxa, pons];
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -58,7 +60,9 @@ export default async function handler(req, res) {
       const prev = merged.get(k);
       if (!prev) { merged.set(k, row); continue; }
       // first adapter keeps the launchpad tag; later ones only fill genuine gaps
-      for (const f of ['mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','imageEmoji','imageHue','x','telegram','website','createdAt','name','status']) {
+      // 'launchpad' MUST be in this list: gecko (first) knows the numbers but not the pad,
+      // so the launchpad adapters that follow have to be able to fill the tag.
+      for (const f of ['launchpad','mcapUsd','volUsd','liqUsd','change24h','holders','imageUrl','imageEmoji','imageHue','x','telegram','website','createdAt','name','status','buyers1h','graduationPct']) {
         if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
       }
       if (!prev.alsoOn?.includes(row.launchpad)) (prev.alsoOn ||= []).push(row.launchpad);
@@ -73,6 +77,15 @@ export default async function handler(req, res) {
   // noxa/pools index the whole chain; only the factory is truth.
   let creatorCounts = {};
   if (R_URL && R_TOK) {
+    // EAGER TAG RESOLUTION for the biggest tokens. Graduated tokens (NOVAAI, PONS, DOGO…) come
+    // from gecko and aren't in any launchpad's active list, so only the deploying factory can
+    // identify them. Resolving the top-by-mcap inline means TOP gets labelled within a couple of
+    // page loads instead of waiting on the background cron. Results cache forever.
+    try {
+      const byCap = [...launches].sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 60);
+      await resolveTags(byCap.map(l => l.ca), 15);
+    } catch {}
+
     // PRIMARY tag source: the chain index, built from factory logs (~50 tokens per request —
     // vastly cheaper than per-token lookups, which Blockscout rate-limits).
     const idxTags = new Map();
