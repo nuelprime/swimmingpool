@@ -10,8 +10,9 @@ import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
 import * as chain from '../lib/adapters/chain.js';
 import * as gecko from '../lib/adapters/gecko.js';
+import * as indexed from '../lib/adapters/indexed.js';
 import { valid } from '../lib/adapters/_shape.js';
-import { LAUNCHPADS } from '../lib/factories.js';
+import { LAUNCHPADS, TOKEN_PAD_OVERRIDES } from '../lib/factories.js';
 import { cachedTags, resolveTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons } from '../lib/holders.js';
@@ -25,7 +26,9 @@ import { cachedHolders, cachedIcons } from '../lib/holders.js';
 // supply what gecko cannot know — which pad a token came from, plus holders/emoji/X handles.
 // Removing pons here previously wiped pons from the feed entirely: gecko covers pons tokens'
 // prices but has no idea they're pons.
-const ADAPTERS = [gecko, pools, noxa, pons];
+// `indexed` last: it contributes factory-discovered tokens from pads with no API of their own
+// (letscash, dontblink, arena, bankr…), which nothing else in this list can see.
+const ADAPTERS = [gecko, pools, noxa, pons, indexed];
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -106,6 +109,10 @@ export default async function handler(req, res) {
         l.padUnverified = true;              // tag cache hasn't reached it yet
         if (!l.launchpad) l.launchpad = 'other';
       }
+      // human-verified override wins over everything: a pad's own team token generally has no
+      // factory trail, so $PONS/$NOVAAI would otherwise sit in 'other' forever.
+      const ov = TOKEN_PAD_OVERRIDES[l.ca.toLowerCase()];
+      if (ov) { l.launchpad = ov; l.padUnverified = false; }
     }
     // true creator counts from the same index rows
     if (Array.isArray(idxRows)) {
