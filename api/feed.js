@@ -8,14 +8,17 @@
 import * as pools from '../lib/adapters/pools.js';
 import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
+import * as chain from '../lib/adapters/chain.js';
 import { valid } from '../lib/adapters/_shape.js';
 import { LAUNCHPADS } from '../lib/factories.js';
 import { cachedTags } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
-import { cachedHolders } from '../lib/holders.js';
+import { cachedHolders, cachedIcons } from '../lib/holders.js';
 
 // order matters: first adapter to claim a CA owns its launchpad tag
-const ADAPTERS = [pools, noxa, pons];
+// chain first: its launchpad tags come from the deploying factory, so they win on merge,
+// and it's the only source that sees every pad (graduated pons, arena, unknown pads).
+const ADAPTERS = [chain, pools, noxa, pons];
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -129,6 +132,10 @@ export default async function handler(req, res) {
   // here so the feed never waits on network; the indexer fills the cache in the background.
   try {
     const hold = await cachedHolders(launches.map(l => l.ca));
+    // icons from the same cache — fills pools.trade's missing logos
+    const icons = await cachedIcons(launches.map(l => l.ca));
+    for (const l of launches) { if (!l.imageUrl) { const u = icons.get(l.ca.toLowerCase()); if (u) l.imageUrl = u; } }
+
     const stillMissing = [];
     for (const l of launches) {
       if (l.holders == null) {
