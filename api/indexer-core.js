@@ -153,7 +153,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         try { const t = JSON.parse(all[i]); if (!t.sym) need.push(t); } catch {}
       }
     }
-    const batch = need.slice(0, 10);
+    const batch = need.slice(0, 80);   // name/symbol are cheap eth_calls, not Blockscout
+                                       // lookups — 12/run left 200-token pads invisible for hours
     if (batch.length) {
       await Promise.all(batch.map(async t => {
         const id = await tokenIdentity(t.ca);
