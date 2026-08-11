@@ -59,7 +59,7 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
       const rec = {
         ca,
         launchpad: cfg.launchpad,
-        deployer: String(p.deployer||'').toLowerCase() || null,
+        deployer: String(p.deployer||p.creator||p.owner||p.dev||'').toLowerCase() || null,
         pool: String(p.pool||'').toLowerCase() || null,
         pairToken: String(p.pairToken||'').toLowerCase() || null,
         block: blk,
@@ -97,8 +97,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const turn = turnRaw ? parseInt(turnRaw, 10) : 0;
     // Take three factories per run rather than one. With 9 registered, one-per-run meant a pad
     // like letscash only got a turn every ~45 minutes, so its new pairs never surfaced.
-    targets = [all[turn % all.length], all[(turn + 1) % all.length]];
-    await redis(['SET', 'idx:turn', String((turn + 2) % all.length)]);
+    targets = [all[turn % all.length], all[(turn + 1) % all.length], all[(turn + 2) % all.length]];
+    await redis(['SET', 'idx:turn', String((turn + 3) % all.length)]);
   } else {
     targets = all.filter(([a, c]) => c.launchpad === only || a === only.toLowerCase());
   }

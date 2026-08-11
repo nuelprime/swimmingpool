@@ -81,7 +81,7 @@ export default async function handler(req, res) {
       for (const f of FILLABLE) {
         if ((prev[f] === null || prev[f] === undefined) && row[f] != null) prev[f] = row[f];
       }
-      if (!prev.alsoOn?.includes(row.launchpad)) (prev.alsoOn ||= []).push(row.launchpad);
+      if (row.launchpad && !prev.alsoOn?.includes(row.launchpad)) (prev.alsoOn ||= []).push(row.launchpad);
     }
   });
 
@@ -140,23 +140,27 @@ export default async function handler(req, res) {
       const ov = TOKEN_PAD_OVERRIDES[l.ca.toLowerCase()];
       if (ov) { l.launchpad = ov; l.padUnverified = false; }
     }
-    // true creator counts from the same index rows
+    // true creator counts — union of the chain index (deployer) and the cumulative feed map
+    // seen:v2 (creator), deduped by CA, plus rows first seen this very build. seen:v2 is what
+    // covers pons: its V2 factory emits no queryable logs, so idx alone left every pons dev
+    // badge-less while the drawer read the same empty store and showed 0. One universe now.
+    const ownerByCa = new Map();
     if (Array.isArray(idxRows)) {
       for (let i = 1; i < idxRows.length; i += 2) {
-        try {
-          const t = JSON.parse(idxRows[i]);
-          const d = (t.deployer || '').toLowerCase();
-          if (d) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
-        } catch {}
+        try { const t = JSON.parse(idxRows[i]); const d = (t.deployer || '').toLowerCase(); if (d && t.ca) ownerByCa.set(t.ca.toLowerCase(), d); } catch {}
       }
     }
-    // supplement counts with adapter-known creators so xN isn't blank pre-backfill
+    const seenRows = await redis(['HGETALL', 'seen:v2']);
+    if (Array.isArray(seenRows)) {
+      for (let i = 1; i < seenRows.length; i += 2) {
+        try { const c = JSON.parse(seenRows[i]); const d = (c.creator || '').toLowerCase(); if (d && c.ca && !ownerByCa.has(c.ca.toLowerCase())) ownerByCa.set(c.ca.toLowerCase(), d); } catch {}
+      }
+    }
     for (const l of launches) {
-      const c = (l.creator || '').toLowerCase();
-      if (c && !creatorCounts[c]) {
-        creatorCounts[c] = launches.filter(x => (x.creator || '').toLowerCase() === c).length;
-      }
+      const d = (l.creator || '').toLowerCase();
+      if (d && !ownerByCa.has(l.ca.toLowerCase())) ownerByCa.set(l.ca.toLowerCase(), d);
     }
+    for (const d of ownerByCa.values()) creatorCounts[d] = (creatorCounts[d] || 0) + 1;
   }
 
   // 2.5) DEXSCREENER FILL — universal market data. Each launchpad's API leaves different

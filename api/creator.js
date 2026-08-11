@@ -48,6 +48,22 @@ export default async function handler(req, res) {
         } catch {}
       }
     }
+    // 1.5) cumulative feed map (seen:v2) — every row the feed has ever served, creator included.
+    // This is what covers pons: its V2 factory emits no queryable logs, so pons launches never
+    // reach idx:tokens — but they cross the feed every tick and accumulate here.
+    const seenRaw = await redis(['HGETALL', 'seen:v2']);
+    if (Array.isArray(seenRaw)) {
+      const have = new Set(launches.map(l => l.ca.toLowerCase()));
+      for (let i = 1; i < seenRaw.length; i += 2) {
+        try {
+          const c = JSON.parse(seenRaw[i]);
+          if ((c.creator || '').toLowerCase() === want && c.ca && !have.has(c.ca.toLowerCase())) {
+            have.add(c.ca.toLowerCase());
+            launches.push({ ca: c.ca, sym: c.sym, name: c.name, launchpad: c.pad, at: c.at });
+          }
+        } catch {}
+      }
+    }
     // 2) adapter history as a supplement (catches launches older than the index backfill)
     for (const a of [pools, noxa, pons]) {
       try {
