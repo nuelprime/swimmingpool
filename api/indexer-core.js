@@ -184,7 +184,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         const raw = await redis(['GET', 'need:holders']);
         if (raw) { const list = JSON.parse(raw); if (Array.isArray(list) && list.length) holdTargets = list; }
       } catch {}
-      if (room(6_000)) summary._holders = await resolveHolders(holdTargets, 20);
+      if (room(6_000)) summary._holders = await resolveHolders(holdTargets, 150);
 
       // dev wallets: resolve from the feed's worklist (tokens whose creator is a factory, so the
       // human wallet only shows up as the creation-tx sender)

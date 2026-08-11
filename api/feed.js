@@ -211,13 +211,13 @@ export default async function handler(req, res) {
     // never reached tokens that already had everything else).
     const needy = launches.filter(l => l.holders == null);
     const newestNeedy = needy.filter(l => l.createdAt)
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 14).map(l => l.ca);
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20).map(l => l.ca);
     const biggestNeedy = needy
-      .sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 14).map(l => l.ca);
+      .sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 20).map(l => l.ca);
     const freshNeedy = [...new Set([...newestNeedy, ...biggestNeedy])];
     if (freshNeedy.length) {
       try {
-        await resolveHolders(freshNeedy, 28);
+        await resolveHolders(freshNeedy, 40);
         const again = await cachedHolders(freshNeedy);
         for (const l of launches) {
           if (l.holders == null) { const h = again.get(l.ca.toLowerCase()); if (h != null) l.holders = h; }
