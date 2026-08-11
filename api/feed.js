@@ -12,7 +12,7 @@ import * as chain from '../lib/adapters/chain.js';
 import * as gecko from '../lib/adapters/gecko.js';
 import * as indexed from '../lib/adapters/indexed.js';
 import { valid } from '../lib/adapters/_shape.js';
-import { LAUNCHPADS, TOKEN_PAD_OVERRIDES, FACTORIES } from '../lib/factories.js';
+import { LAUNCHPADS, TOKEN_PAD_OVERRIDES, FACTORIES, DEX_PAD } from '../lib/factories.js';
 const KNOWN_FACTORY = new Set(Object.keys(FACTORIES));
 import { cachedTags, resolveTags, rawFactories } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
@@ -121,7 +121,11 @@ export default async function handler(req, res) {
         l.launchpad = real;
       } else if (!real) {
         l.padUnverified = true;              // tag cache hasn't reached it yet
-        if (!l.launchpad) l.launchpad = 'other';
+        // DEX hint: gecko's dex id is launchpad-branded for pads that run their own venue.
+        // A hint only — never overrides a factory-derived tag.
+        const hint = l._dex ? DEX_PAD[l._dex] : null;
+        if (hint) { l.launchpad = hint; l.padFromDex = true; }
+        else if (!l.launchpad) l.launchpad = 'other';
       }
       // The tag cache stores each token's contract creator. When that address ISN'T a known
       // factory it's an EOA that deployed the token directly — i.e. the dev wallet. Use it so
@@ -202,14 +206,18 @@ export default async function handler(req, res) {
     // returns holders_count: 0, which is exactly the useful answer ("nobody's in yet"). Waiting
     // on the 5-minute cron meant NEW PAIRS was always blank at the moment it matters, so resolve
     // the freshest ones synchronously. One call each, cached after, bounded so latency stays sane.
-    const freshNeedy = launches
-      .filter(l => l.holders == null && l.createdAt)
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      .slice(0, 25)
-      .map(l => l.ca);
+    // Two inline batches: the NEWEST (NEW PAIRS needs them at the moment of launch) and the
+    // BIGGEST by mcap (TOP is the most-viewed tab and was being starved — the background worklist
+    // never reached tokens that already had everything else).
+    const needy = launches.filter(l => l.holders == null);
+    const newestNeedy = needy.filter(l => l.createdAt)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 14).map(l => l.ca);
+    const biggestNeedy = needy
+      .sort((a, b) => (b.mcapUsd || 0) - (a.mcapUsd || 0)).slice(0, 14).map(l => l.ca);
+    const freshNeedy = [...new Set([...newestNeedy, ...biggestNeedy])];
     if (freshNeedy.length) {
       try {
-        await resolveHolders(freshNeedy, 20);
+        await resolveHolders(freshNeedy, 28);
         const again = await cachedHolders(freshNeedy);
         for (const l of launches) {
           if (l.holders == null) { const h = again.get(l.ca.toLowerCase()); if (h != null) l.holders = h; }

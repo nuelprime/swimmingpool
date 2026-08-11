@@ -93,6 +93,8 @@ th:first-child,td:first-child{text-align:left;padding-left:16px}
 th.on{color:var(--water3)}
 td{padding:12px;text-align:right;border-bottom:1px solid var(--grout);white-space:nowrap;font-variant-numeric:tabular-nums}
 tbody tr{cursor:pointer;background:#fff}
+@keyframes swoop{from{background:#dff4fb;transform:translateY(-7px);opacity:.35}to{background:#fff;transform:none;opacity:1}}
+tbody tr.fresh{animation:swoop .5s ease-out}
 tbody tr:nth-child(even){background:var(--tile)}
 tbody tr:hover{background:#e2f4fa}
 tbody tr:last-child td{border-bottom:none}
@@ -434,22 +436,49 @@ function render(){
   $('pool').style.display = 'none';
   if (!list.length){ $('rows').innerHTML = `<tr><td colspan="8" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
-  $('rows').innerHTML = list.map(l=>{
+  // INCREMENTAL RENDER. Replacing tbody.innerHTML rebuilt every <tr> on every poll, so images
+  // re-downloaded and the page visibly jumped — worst exactly when a new pair arrived. Instead,
+  // keep existing rows in place, insert new ones, and only patch cells whose value changed.
+  const rowHTML = (l)=>{
     const serial = feed._serial?.get((l.creatorAddress||'').toLowerCase())||0;
     const xh = xOf(l.xUrl);
     const fb = `<span class=em style=&quot;background:hsl(${(l.imageHue??200)},65%,85%)&quot;>${esc((l.tokenSymbol||'?').slice(0,2))}</span>`.replace(/&quot;/g,'\'');
-    const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
-    return `<tr data-ca="${esc(l.tokenAddress)}">
-      <td><div class=tk>${img}<div><div class=sym>${padLogo(l.launchpad)}${esc((l.tokenSymbol||'').slice(0,24))}${l._auction?' <span class=badge>cca</span>':''}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
+    const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" loading="lazy" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
+    return `<td><div class=tk>${img}<div><div class=sym>${padLogo(l.launchpad)}${esc((l.tokenSymbol||'').slice(0,24))}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="24h">${pct(l._c24)}</td>
       <td data-l="hold">${num(l.holderCount)}</td>
       <td data-l="buy1h">${num(l.buyersLast1h)}</td>
       <td>${xh?`<a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="${l.xVerified?'vx':''}">@${esc(xh)}</a>`:'<span class=dimc>—</span>'}</td>
-      <td><span class=addr data-dev="${esc(l.creatorAddress||'')}">${l.creatorEns?esc(l.creatorEns):short(l.creatorAddress)}</span>${serial>1?`<span class=serial title="launches by this wallet in current index">×${serial}</span>`:''}</td>
-    </tr>`;
-  }).join('');
+      <td><span class=addr data-dev="${esc(l.creatorAddress||'')}">${l.creatorEns?esc(l.creatorEns):short(l.creatorAddress)}</span>${serial>1?`<span class=serial title="launches by this wallet in current index">×${serial}</span>`:''}</td>`;
+  };
+
+  const tb = $('rows');
+  const existing = new Map([...tb.children].map(tr => [tr.dataset.ca, tr]));
+  const wanted = list.map(l => l.tokenAddress);
+  let prev = null;
+  for (const l of list){
+    const ca = l.tokenAddress;
+    let tr = existing.get(ca);
+    if (tr){
+      const html = rowHTML(l);
+      if (tr.dataset.h !== html){ tr.innerHTML = html; tr.dataset.h = html; }   // only touch changed rows
+      existing.delete(ca);
+    } else {
+      tr = document.createElement('tr');
+      tr.dataset.ca = ca;
+      tr.innerHTML = rowHTML(l);
+      tr.dataset.h = tr.innerHTML;
+      tr.classList.add('fresh');                                               // brief highlight
+      setTimeout(()=>tr.classList.remove('fresh'), 1500);
+    }
+    // place in the right position without rebuilding siblings
+    const target = prev ? prev.nextSibling : tb.firstChild;
+    if (tr !== target) tb.insertBefore(tr, target);
+    prev = tr;
+  }
+  for (const tr of existing.values()) tr.remove();                             // filtered out
 
   $('rows').querySelectorAll('tr').forEach(tr=>tr.onclick=()=>openToken(tr.dataset.ca));
   $('rows').querySelectorAll('.copy').forEach(b=>b.onclick=ev=>copy(b.dataset.cp,ev));
