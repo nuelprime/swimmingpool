@@ -81,8 +81,13 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
   return { tokens, newestBlock };
 }
 
+const DEADLINE_MS = 45_000;   // Vercel kills at 60s; leave headroom to finish and respond
+
 export async function runIndexer({ backfillPages = 3, livePages = 2, only = null } = {}) {
   if (!R_URL || !R_TOK) return { error: 'no redis' };
+  const startedAt = Date.now();
+  const timeLeft = () => DEADLINE_MS - (Date.now() - startedAt);
+  const room = (ms) => timeLeft() > ms;
   const summary = {};
   // rotate one factory per invocation so each run fits the serverless time budget.
   const all = Object.entries(FACTORIES);
@@ -92,8 +97,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const turn = turnRaw ? parseInt(turnRaw, 10) : 0;
     // Take three factories per run rather than one. With 9 registered, one-per-run meant a pad
     // like letscash only got a turn every ~45 minutes, so its new pairs never surfaced.
-    targets = [all[turn % all.length], all[(turn + 1) % all.length], all[(turn + 2) % all.length]];
-    await redis(['SET', 'idx:turn', String((turn + 3) % all.length)]);
+    targets = [all[turn % all.length], all[(turn + 1) % all.length]];
+    await redis(['SET', 'idx:turn', String((turn + 2) % all.length)]);
   } else {
     targets = all.filter(([a, c]) => c.launchpad === only || a === only.toLowerCase());
   }
@@ -107,7 +112,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     // write tokens into the index hash (idx:tokens), keyed by CA
     if (res.tokens.length) {
       // fill on-chain identity for the newest tokens (bounded so cron stays fast)
-      const toName = res.tokens.slice(0, 8);
+      const toName = res.tokens.slice(0, 6);
       await Promise.all(toName.map(async t => {
         const id = await tokenIdentity(t.ca);
         t.name = id.name; t.sym = id.symbol;
@@ -134,6 +139,10 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   // and we must not lose the record of a successful run if a slow step times out.
   await redis(['SET', 'idx:lastRun', String(Date.now())]);
 
+  // Everything past this point is optional polish — skip it when the clock is short so the
+  // function returns cleanly rather than being killed mid-flight.
+  if (!room(12_000)) return { ...summary, _skipped: 'identity/tags/holders/devs', _ms: Date.now() - startedAt };
+
   // PROGRESSIVE IDENTITY BACKFILL — name tokens already in the index that still lack a symbol,
   // so the feed's quality gate lets more of them through each tick instead of them sitting unrenderable.
   try {
@@ -144,7 +153,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         try { const t = JSON.parse(all[i]); if (!t.sym) need.push(t); } catch {}
       }
     }
-    const batch = need.slice(0, 12);
+    const batch = need.slice(0, 10);
     if (batch.length) {
       await Promise.all(batch.map(async t => {
         const id = await tokenIdentity(t.ca);
@@ -158,6 +167,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     }
   } catch {}
 
+  if (!room(10_000)) return { ...summary, _skipped: 'tags/holders/devs', _ms: Date.now() - startedAt };
+
   // TAG RESOLUTION — give the launchpad tag cache a push each run using whatever the
   // feed most recently served (seen:v2). One Blockscout call per token, cached forever.
   try {
@@ -165,7 +176,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const cas = [];
     if (Array.isArray(seen)) for (let i = 0; i < seen.length; i += 2) cas.push(seen[i]);
     if (cas.length) {
-      const t = await resolveTags(cas, 60);
+      const t = await resolveTags(cas, 25);
       summary._tagged = t.resolved;
       // resolve holders from the feed's targeted worklist (tokens genuinely missing them)
       let holdTargets = cas;
@@ -173,7 +184,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         const raw = await redis(['GET', 'need:holders']);
         if (raw) { const list = JSON.parse(raw); if (Array.isArray(list) && list.length) holdTargets = list; }
       } catch {}
-      summary._holders = await resolveHolders(holdTargets, 30);
+      if (room(6_000)) summary._holders = await resolveHolders(holdTargets, 20);
 
       // dev wallets: resolve from the feed's worklist (tokens whose creator is a factory, so the
       // human wallet only shows up as the creation-tx sender)
@@ -182,12 +193,12 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         const raw = await redis(['GET', 'need:devs']);
         if (raw) { const l = JSON.parse(raw); if (Array.isArray(l) && l.length) devTargets = l; }
       } catch {}
-      summary._devs = await resolveDevs(devTargets, 25);
+      if (room(5_000)) summary._devs = await resolveDevs(devTargets, 12);
       if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}
 
-  return summary;
+  return { ...summary, _ms: Date.now() - startedAt };
 }
 
 // HTTP entry — called by cron (pulse.yml) or manually

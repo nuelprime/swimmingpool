@@ -16,7 +16,7 @@ import { LAUNCHPADS, TOKEN_PAD_OVERRIDES, FACTORIES } from '../lib/factories.js'
 const KNOWN_FACTORY = new Set(Object.keys(FACTORIES));
 import { cachedTags, resolveTags, rawFactories } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
-import { cachedHolders, cachedIcons } from '../lib/holders.js';
+import { cachedHolders, cachedIcons, resolveHolders } from '../lib/holders.js';
 import { cachedDevs } from '../lib/devs.js';
 
 // Single source of truth for the payload shape. FILLABLE = everything except identity fields
@@ -197,6 +197,27 @@ export default async function handler(req, res) {
       }
     }
     if (needDev.length) await redis(['SET', 'need:devs', JSON.stringify(needDev.slice(0, 400)), 'EX', '3600']);
+
+    // INLINE for the newest tokens. Blockscout answers immediately — a 0-minute-old token
+    // returns holders_count: 0, which is exactly the useful answer ("nobody's in yet"). Waiting
+    // on the 5-minute cron meant NEW PAIRS was always blank at the moment it matters, so resolve
+    // the freshest ones synchronously. One call each, cached after, bounded so latency stays sane.
+    const freshNeedy = launches
+      .filter(l => l.holders == null && l.createdAt)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, 25)
+      .map(l => l.ca);
+    if (freshNeedy.length) {
+      try {
+        await resolveHolders(freshNeedy, 20);
+        const again = await cachedHolders(freshNeedy);
+        for (const l of launches) {
+          if (l.holders == null) { const h = again.get(l.ca.toLowerCase()); if (h != null) l.holders = h; }
+        }
+        const icons2 = await cachedIcons(freshNeedy);
+        for (const l of launches) { if (!l.imageUrl) { const u = icons2.get(l.ca.toLowerCase()); if (u) l.imageUrl = u; } }
+      } catch {}
+    }
 
     const stillMissing = [];
     for (const l of launches) {
