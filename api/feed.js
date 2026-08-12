@@ -22,7 +22,7 @@ import { cachedDevs } from '../lib/devs.js';
 // Single source of truth for the payload shape. FILLABLE = everything except identity fields
 // (which must never be overwritten) and derived ones (resolved later in the pipeline).
 const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website',
-              'mcapUsd','volUsd','liqUsd','change24h','holders','buyers1h','createdAt',
+              'mcapUsd','volUsd','liqUsd','change24h','change1h','change6h','holders','buyers1h','createdAt',
               'status','imageUrl','imageEmoji','imageHue','description','graduationPct','xVerified'];
 const NEVER_FILL = new Set(['ca','sym','alsoOn','creatorEns']);
 const FILLABLE = KEEP.filter(f => !NEVER_FILL.has(f));

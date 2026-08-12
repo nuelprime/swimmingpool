@@ -25,6 +25,7 @@
   --ink:#0c3d52; --dim:#5c8ba0; --faint:#8fb8c8;
   --red:#e6483d; --redbg:#fdeceb; --gold:#f4b23a; --goldbg:#fdf4de;
   --green:#0f9d58; --frog:#5cb944;
+  --card:#fff; --swoop:#dff4fb; --panel:linear-gradient(180deg,#eaf8fd,#dcf2fa);
   --disp:'Lilita One',system-ui,sans-serif;
   --mono:'Space Mono',ui-monospace,Menlo,monospace;
 }
@@ -35,15 +36,12 @@ body.night{
   --tile:#0f2c3b; --tile2:#0a212d; --grout:#123a4c; --edge:#1e5c78;
   --ink:#dff4ff; --dim:#84b8cf; --faint:#4f8299;
   --red:#ff6f61; --redbg:#3b1a17; --gold:#ffc861; --goldbg:#3a2e14;
-  --green:#3ddc97; --frog:#7ede5e; --card:#0d2634;
+  --green:#3ddc97; --frog:#7ede5e;
+  --card:#0d2634; --swoop:#16405a;                                  /* swoop landed on hard white */
+  --panel:linear-gradient(180deg,#12374d,#0d2837);                  /* the chart box */
 }
-body.night .lane,body.night .deck,body.night .search input,body.night .pager .at,
-body.night table,body.night tbody tr,body.night .card{background:var(--card)}
-body.night .water{border-bottom-color:var(--tile2)}
 body.night .caustic,body.night .caustic2{opacity:.3}
-body.night .pad.unk{box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
-body.night .lanebox{border-color:var(--card)}
-body.night #night{filter:brightness(1.6)}
+body.night tbody tr:nth-child(even){background:#0b2130}
 
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--tile2)}
@@ -57,7 +55,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 /* ---------- water header with caustics ---------- */
 .water{position:relative;overflow:hidden;color:#fff;
   background:linear-gradient(180deg,var(--water1),var(--water2) 70%,var(--water3));
-  border-bottom:6px solid #fff; box-shadow:0 2px 0 var(--edge)}
+  border-bottom:6px solid var(--card); box-shadow:0 2px 0 var(--edge)}
 .caustic,.caustic2{position:absolute;inset:-40%;pointer-events:none;mix-blend-mode:overlay;opacity:.55;
   background:radial-gradient(ellipse 90px 40px at 20% 30%,rgba(255,255,255,.9),transparent 60%),
              radial-gradient(ellipse 140px 55px at 60% 60%,rgba(255,255,255,.7),transparent 60%),
@@ -72,6 +70,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 h1{font-family:var(--disp);font-size:30px;letter-spacing:.02em;text-shadow:0 2px 0 rgba(9,66,96,.35);font-weight:400}
 h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 .sub{font-size:11px;opacity:.9}
+#night{margin-left:auto;font-size:15px;line-height:1;padding:7px 9px;border-radius:10px;
+  background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.3)}
+#night:hover{background:rgba(255,255,255,.26)}
 
 .spot{position:relative;width:70px;height:46px;flex:none}
 .spot .ring{top:auto;bottom:16px}
@@ -79,17 +80,17 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 
 /* ---------- lane tabs ---------- */
 .lanes{display:flex;gap:10px;padding:14px max(20px,calc((100% - 1200px)/2)) 0;flex-wrap:wrap;align-items:flex-end}
-.lane{display:flex;align-items:center;gap:9px;background:#fff;border:2px solid var(--edge);border-bottom:none;
+.lane{display:flex;align-items:center;gap:9px;background:var(--card);border:2px solid var(--edge);border-bottom:none;
   border-radius:12px 12px 0 0;padding:9px 16px 11px;color:var(--dim);box-shadow:inset 0 -3px 0 var(--grout)}
 .lane.on{color:var(--ink);border-color:var(--water2);box-shadow:inset 0 -3px 0 var(--water1)}
 .search{margin-left:auto;display:flex;align-items:center;padding-bottom:8px}
-.search input{background:#fff;border:2px solid var(--edge);border-radius:20px;padding:8px 16px;width:300px;max-width:74vw;
+.search input{background:var(--card);border:2px solid var(--edge);border-radius:20px;padding:8px 16px;width:300px;max-width:74vw;
   font:inherit;color:var(--ink);outline:none}
 .search input:focus{border-color:var(--water2)}
 .search input::placeholder{color:var(--faint)}
 
 /* ---------- filter deck ---------- */
-.deck{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px max(20px,calc((100% - 1200px)/2));background:#fff;
+.deck{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px max(20px,calc((100% - 1200px)/2));background:var(--card);
   border-top:2px solid var(--water2);border-bottom:2px solid var(--edge)}
 .f{display:flex;align-items:center;gap:5px;background:var(--tile);border:1.5px solid var(--edge);border-radius:9px;
   padding:5px 9px;color:var(--dim);font-size:11px}
@@ -106,7 +107,7 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
   color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
 .pager button:hover:not(:disabled){background:var(--tile2);border-color:var(--water2)}
 .pager button:disabled{opacity:.35;cursor:default}
-.pager .at{background:#fff;border:1.5px solid var(--edge);border-radius:9px;padding:5px 10px}
+.pager .at{background:var(--card);border:1.5px solid var(--edge);border-radius:9px;padding:5px 10px}
 .pager .at b{color:var(--ink)}
 .pager select{background:var(--tile);border:1.5px solid var(--edge);border-radius:9px;padding:5px 7px;
   color:var(--ink);font:inherit;font-size:11px;outline:none}
@@ -114,15 +115,15 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 
 /* ---------- table on tile ---------- */
 .wrap{overflow-x:auto;padding:14px 12px 4px}
-table{border-collapse:separate;border-spacing:0;width:100%;max-width:1200px;min-width:960px;margin:0 auto;background:#fff;
+table{border-collapse:separate;border-spacing:0;width:100%;max-width:1200px;min-width:960px;margin:0 auto;background:var(--card);
   border:2px solid var(--edge);border-radius:14px;overflow:hidden}
 th{position:sticky;top:0;background:var(--tile);color:var(--dim);font-weight:700;font-size:10px;text-transform:uppercase;
   letter-spacing:.09em;text-align:right;padding:12px 12px;border-bottom:2px solid var(--edge);cursor:pointer;user-select:none;white-space:nowrap}
 th:first-child,td:first-child{text-align:left;padding-left:16px}
 th.on{color:var(--water3)}
 td{padding:12px;text-align:right;border-bottom:1px solid var(--grout);white-space:nowrap;font-variant-numeric:tabular-nums}
-tbody tr{cursor:pointer;background:#fff}
-@keyframes swoop{from{background:#dff4fb;transform:translateY(-7px);opacity:.35}to{background:#fff;transform:none;opacity:1}}
+tbody tr{cursor:pointer;background:var(--card)}
+@keyframes swoop{from{background:var(--swoop);transform:translateY(-7px);opacity:.35}to{background:var(--card);transform:none;opacity:1}}
 tbody tr.fresh{animation:swoop .5s ease-out}
 tbody tr:nth-child(even){background:var(--tile)}
 tbody tr:hover{background:#e2f4fa}
@@ -134,9 +135,9 @@ tbody tr:last-child td{border-bottom:none}
 .tk .em{font-family:var(--disp);font-size:13px;color:var(--ink)}
 .tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .pad{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
-.pad img{width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px var(--edge);background:#fff}
+.pad img{width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge);background:var(--card)}
 .pad.unk{width:16px;height:16px;border-radius:50%;background:var(--faint);color:#fff;font-size:9px;font-weight:700;
-  box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px var(--edge)}
+  box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
 .tk .nm{color:var(--faint);font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .up{color:var(--green);font-weight:700} .down{color:var(--red);font-weight:700} .dimc{color:var(--faint)}
 .pill{display:inline-block;border-radius:6px;padding:1px 7px;font-weight:700}
@@ -146,14 +147,14 @@ tbody tr:last-child td{border-bottom:none}
 .addr{color:var(--dim);font-size:11px} .addr:hover{color:var(--water3)}
 .addr[data-dev]{cursor:pointer;background:var(--tile);border:1.5px solid var(--edge);border-radius:7px;
   padding:3px 8px;display:inline-block;transition:all .12s}
-.addr[data-dev]:hover{border-color:var(--water2);color:var(--water3);background:#fff}
+.addr[data-dev]:hover{border-color:var(--water2);color:var(--water3);background:var(--card)}
 .addr[data-dev]::after{content:" \2197";font-size:9px;opacity:.5}
 .copy{color:var(--faint);padding:0 4px} .copy:hover{color:var(--water3)}
 
 /* ---------- frog loader ---------- */
 .pool{padding:44px 0 56px;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--dim)}
 .lanebox{position:relative;width:min(460px,84vw);height:76px;border-radius:16px;overflow:hidden;
-  background:linear-gradient(180deg,var(--water1),var(--water2));border:3px solid #fff;box-shadow:0 0 0 2px var(--edge)}
+  background:linear-gradient(180deg,var(--water1),var(--water2));border:3px solid var(--card);box-shadow:0 0 0 2px var(--edge)}
 .lanebox .surface{position:absolute;top:12px;left:0;right:0;height:3px;background:rgba(255,255,255,.85);border-radius:2px}
 .lanebox .ca{position:absolute;inset:-30%;mix-blend-mode:overlay;opacity:.5;
   background:radial-gradient(ellipse 80px 34px at 30% 40%,rgba(255,255,255,.9),transparent 60%),
@@ -177,16 +178,16 @@ tbody tr:last-child td{border-bottom:none}
 .ovl{position:fixed;inset:0;background:rgba(12,61,82,.35);backdrop-filter:blur(2px);display:none;z-index:9}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100vw);background:var(--tile);
   background-image:linear-gradient(var(--grout) 1px,transparent 1px),linear-gradient(90deg,var(--grout) 1px,transparent 1px);
-  background-size:32px 32px;border-left:3px solid #fff;box-shadow:-4px 0 0 var(--edge),-20px 0 40px rgba(12,61,82,.25);
+  background-size:32px 32px;border-left:3px solid var(--card);box-shadow:-4px 0 0 var(--edge),-20px 0 40px rgba(12,61,82,.25);
   z-index:10;transform:translateX(103%);transition:transform .18s ease;overflow-y:auto;padding:18px}
 .drawer.open{transform:none} .ovl.open{display:block}
-.card{background:#fff;border:2px solid var(--edge);border-radius:14px;padding:14px;margin-bottom:12px}
+.card{background:var(--card);border:2px solid var(--edge);border-radius:14px;padding:14px;margin-bottom:12px}
 .dhead{display:flex;align-items:center;gap:11px}
 .dhead img,.dhead .em{width:42px;height:42px;border-radius:11px;background:var(--tile2);border:2px solid var(--edge);
   display:flex;align-items:center;justify-content:center;font-size:24px}
 .dhead h2{font-family:var(--disp);font-size:19px;font-weight:400}
 .dhead .nm2{color:var(--dim);font-size:11px}
-.dhead .x{margin-left:auto;color:var(--dim);font-size:15px;width:30px;height:30px;border-radius:50%;border:2px solid var(--edge);background:#fff}
+.dhead .x{margin-left:auto;color:var(--dim);font-size:15px;width:30px;height:30px;border-radius:50%;border:2px solid var(--edge);background:var(--card)}
 .dhead .x:hover{color:var(--red);border-color:var(--red)}
 .badges{display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap}
 .badge{font-size:10px;border-radius:7px;padding:3px 9px;font-weight:700;background:var(--tile2);color:var(--dim);border:1px solid var(--edge)}
@@ -197,7 +198,7 @@ tbody tr:last-child td{border-bottom:none}
 .kv div{background:var(--tile);border:1.5px solid var(--edge);border-radius:10px;padding:8px 10px}
 .kv b{display:block;font-size:14px;font-family:var(--disp);font-weight:400}
 .kv span{font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
-.spark{width:100%;height:150px;background:linear-gradient(180deg,#eaf8fd,#dcf2fa);border:1.5px solid var(--edge);border-radius:10px;margin-top:10px}
+.spark{width:100%;height:150px;background:var(--panel);border:1.5px solid var(--edge);border-radius:10px;margin-top:10px}
 .meta{font-size:11px;color:var(--dim);margin-top:10px;word-break:break-all}
 .links{display:flex;gap:10px;margin-top:12px}
 .links .ico{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -221,7 +222,7 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   .search{margin-left:0;width:100%} .search input{width:100%}
   .kv{grid-template-columns:1fr 1fr} h1{font-size:24px}
   /* collapsed filter deck behind toggle */
-  .ftoggle{display:block;margin:10px 16px 0;background:#fff;border:2px solid var(--edge);border-radius:20px;
+  .ftoggle{display:block;margin:10px 16px 0;background:var(--card);border:2px solid var(--edge);border-radius:20px;
     padding:8px 16px;font:inherit;color:var(--dim);font-weight:700;width:calc(100% - 32px);text-align:left}
   body:not(.fopen) .deck{display:none}
   .deck{border-top:none}
@@ -231,8 +232,8 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   thead{display:none}
   tbody{display:flex;flex-direction:column;gap:10px}
   tbody tr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 10px;align-items:center;
-    background:#fff !important;border:2px solid var(--edge);border-radius:14px;padding:12px}
-  tbody tr:hover{background:#fff}
+    background:var(--card) !important;border:2px solid var(--edge);border-radius:14px;padding:12px}
+  tbody tr:hover{background:var(--card)}
   td{display:block;border:none !important;padding:0;text-align:left;white-space:normal}
   td:first-child{grid-column:1/4;padding-left:0}
   td[data-l]::before{content:attr(data-l);display:block;font-size:9px;color:var(--faint);
@@ -251,14 +252,14 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
     <div class="spot"><span class="ring"></span><span class="ring r2"></span><span class="ring r3"></span><span class="bub"></span><span class="bub b2"></span><span class="bub b3"></span><span class="bub b4"></span></div>
     <h1>SWIMMINGPOOL<span class="lol">.lol</span></h1>
     <span class="sub">robinhood, every hood</span>
+    <button id="night" title="night swim">🌙</button>
   </div>
 </div>
 
 <div class="lanes">
   <button class="lane on" data-tab="new">NEW PAIRS</button>
   <button class="lane" data-tab="top">TOP</button>
-  <button class="lane" data-tab="gainers">GAINERS</button>
-  <button class="lane" id="night" title="night swim">🌙</button>
+  <button class="lane" data-tab="movers">MOVERS</button>
   <div class="search"><input id="q" placeholder="paste CA · dev wallet · @xhandle — press ↵" spellcheck="false"></div>
 </div>
 
@@ -487,7 +488,7 @@ function render(){
   // on real depth first. 1h window comes from dexscreener, which covers every pad.
   // GAINERS. Percent move alone is a list of $2k tokens that jumped 400% on $80 of volume, so gate
   // on real depth first. Window is 6h — dexscreener only publishes m5/h1/h6/h24, there is no 4h.
-  if (tab === 'gainers') list = list.filter(l => (l._liq ?? 0) >= 5000 && l._c6 != null);
+  if (tab === 'movers') list = list.filter(l => (l._liq ?? 0) >= 5000 && l._c6 != null);
   list.sort((a,b)=>{
     let A=sortVal(a,sort.k), B=sortVal(b,sort.k);
     if (typeof A==='string' || typeof B==='string'){ A=String(A??''); B=String(B??''); return A.localeCompare(B)*-sort.d; }
@@ -702,7 +703,7 @@ async function openCreator(q){
 document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
-  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='gainers'?{k:'_c6',d:-1}:{k:'fdvUsd',d:-1};
+  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='movers'?{k:'_c6',d:-1}:{k:'fdvUsd',d:-1};
   page=1; render();
 });
 $('filters').addEventListener('input', ()=>{ page=1; render(); });
