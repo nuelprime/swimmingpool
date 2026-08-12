@@ -81,6 +81,18 @@ h1 .lol{font-size:15px;opacity:.85;vertical-align:super}
 .f input[type=checkbox]{accent-color:var(--water2)}
 .f .u{color:var(--faint)}
 .reset{color:var(--faint);font-size:11px;padding:4px 8px;border-radius:8px}
+
+/* ---------- pager (lane counter) ---------- */
+.pager{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;
+  padding:4px 12px 20px;color:var(--dim);font-size:11px}
+.pager button{background:var(--tile);border:1.5px solid var(--edge);border-radius:9px;padding:5px 11px;
+  color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+.pager button:hover:not(:disabled){background:var(--tile2);border-color:var(--water2)}
+.pager button:disabled{opacity:.35;cursor:default}
+.pager .at{background:#fff;border:1.5px solid var(--edge);border-radius:9px;padding:5px 10px}
+.pager .at b{color:var(--ink)}
+.pager select{background:var(--tile);border:1.5px solid var(--edge);border-radius:9px;padding:5px 7px;
+  color:var(--ink);font:inherit;font-size:11px;outline:none}
 .reset:hover{color:var(--red);background:var(--redbg)}
 
 /* ---------- table on tile ---------- */
@@ -247,6 +259,8 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
   <thead><tr id="thead"></tr></thead>
   <tbody id="rows"></tbody>
 </table></div>
+
+<div class="pager" id="pager"></div>
 
 <div class="pool" id="pool">
   <div class="lanebox">
@@ -416,11 +430,35 @@ const COLS = [
 ];
 function header(){
   $('thead').innerHTML = COLS.map(([k,t])=>`<th data-k="${k}" class="${sort.k===k?'on':''}">${t}${sort.k===k?(sort.d<0?' ▾':' ▴'):''}</th>`).join('');
-  $('thead').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; sort = sort.k===k?{k,d:-sort.d}:{k,d:-1}; render(); });
+  $('thead').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; sort = sort.k===k?{k,d:-sort.d}:{k,d:-1}; page=1; render(); });
 }
 const sortVal = (l,k) =>
   k==='token'?l.tokenSymbol: k==='x'?(xOf(l.xUrl)||''): k==='creator'?(l.creatorAddress||''):
   k==='ca'?l.tokenAddress: k==='createdAt'?new Date(l.createdAt||0).getTime(): l[k];
+// PAGING. The feed is well past 800 rows and every one of them was being built into the DOM on
+// each poll, so the incremental renderer had to diff the whole table to update a handful of cells.
+// Render a window instead. Page resets to 1 on any filter, sort or tab change — staying on page 7
+// after narrowing to twelve results would just show an empty table.
+let page = 1, perPage = Number(localStorage.getItem('sp.perPage')) || 100;
+
+function pager(total){
+  const el = $('pager');
+  if (!total){ el.innerHTML=''; return; }
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const from = (page-1)*perPage + 1, to = Math.min(page*perPage, total);
+  el.innerHTML = `
+    <button id="pgFirst" ${page<=1?'disabled':''}>« first</button>
+    <button id="pgPrev"  ${page<=1?'disabled':''}>‹ prev</button>
+    <span class="at">lane <b>${page}</b> / ${pages} · showing <b>${from}–${to}</b> of ${total}</span>
+    <button id="pgNext" ${page>=pages?'disabled':''}>next ›</button>
+    <button id="pgLast" ${page>=pages?'disabled':''}>last »</button>
+    <select id="pgSize">${[25,50,100,250,500].map(n=>`<option value="${n}" ${n===perPage?'selected':''}>${n} / lane</option>`).join('')}</select>`;
+  const go = (n)=>{ page = Math.min(Math.max(1,n), pages); render(); window.scrollTo({top:0,behavior:'smooth'}); };
+  $('pgFirst').onclick=()=>go(1); $('pgPrev').onclick=()=>go(page-1);
+  $('pgNext').onclick=()=>go(page+1); $('pgLast').onclick=()=>go(pages);
+  $('pgSize').onchange=(e)=>{ perPage=Number(e.target.value); localStorage.setItem('sp.perPage',perPage); page=1; render(); };
+}
+
 function render(){
   header();
   const src = feed.launches.slice();
@@ -432,7 +470,12 @@ function render(){
   });
 
   $('pool').style.display = 'none';
-  if (!list.length){ $('rows').innerHTML = `<tr><td colspan="8" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
+  const total = list.length;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  if (page > pages) page = pages;
+  list = list.slice((page-1)*perPage, page*perPage);
+  pager(total);
+  if (!total){ $('rows').innerHTML = `<tr><td colspan="8" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
   // INCREMENTAL RENDER. Replacing tbody.innerHTML rebuilt every <tr> on every poll, so images
   // re-downloaded and the page visibly jumped — worst exactly when a new pair arrived. Instead,
@@ -634,14 +677,14 @@ document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
   sort = tab==='new'?{k:'createdAt',d:-1}:{k:'fdvUsd',d:-1};
-  render();
+  page=1; render();
 });
-$('filters').addEventListener('input', render);
+$('filters').addEventListener('input', ()=>{ page=1; render(); });
 $('ftoggle').onclick = () => {
   const open = document.body.classList.toggle('fopen');
   $('ftoggle').textContent = open ? 'filters ▴' : 'filters ▾';
 };
-$('reset').onclick=()=>{ $('filters').querySelectorAll('input').forEach(i=>i.type==='checkbox'?i.checked=false:i.value=''); render(); };
+$('reset').onclick=()=>{ $('filters').querySelectorAll('input').forEach(i=>i.type==='checkbox'?i.checked=false:i.value=''); page=1; render(); };
 function runSearch(){
   const q = $('q').value.trim();
   if(!q) return;
