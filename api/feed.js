@@ -167,7 +167,16 @@ export default async function handler(req, res) {
   // holes (pons has no volume, noxa has no 24h change); dexscreener indexes every pool on the
   // chain, so one pass fills them all consistently.
   try {
-    const dex = await dexEnrich(launches.map(l => l.ca), { max: 600 });
+    // ENRICHMENT COVERAGE. dexscreener is the ONLY market-data source for the index-sourced pads
+    // (pools.fun, letscash, dontblink), so a cap that truncates this list silently zeroes them:
+    // adapters merge in order, `indexed` runs last, and gecko+pools.trade+noxa alone already
+    // exceed 600 rows. Two changes — order the request so pads with no API of their own go FIRST
+    // (the ones with an API at least have mcap without this), and cover the whole feed. At 30
+    // addresses per request even 1,200 tokens is ~40 cheap calls.
+    const HAS_OWN_API = new Set(['pools.trade', 'noxa', 'pons']);
+    const dexOrder = [...launches].sort((a, b) =>
+      (HAS_OWN_API.has(a.launchpad) ? 1 : 0) - (HAS_OWN_API.has(b.launchpad) ? 1 : 0));
+    const dex = await dexEnrich(dexOrder.map(l => l.ca), { max: 1200 });
     for (const l of launches) {
       const d = dex.get(l.ca.toLowerCase());
       if (!d) continue;
