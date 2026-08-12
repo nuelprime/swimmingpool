@@ -4,11 +4,14 @@ import * as pools from '../lib/adapters/pools.js';
 import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
 import * as gecko from '../lib/adapters/gecko.js';
+import * as bankr from '../lib/adapters/bankr.js';
+import * as letscash from '../lib/adapters/letscash.js';
+import { cachedTags } from '../lib/tagger.js';
 import { xHandle } from '../lib/adapters/_shape.js';
 
 // gecko included so a search can resolve ANY token on the chain, not just ones a launchpad API
 // happens to list. Without it, pasting a CA that only gecko knows returned 404 → dead drawer.
-const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons, 'gecko': gecko };
+const ADAPTERS = { 'pools.trade': pools, 'noxa': noxa, 'pons': pons, 'letscash': letscash, 'bankr': bankr, 'gecko': gecko };
 const TTL = 120;
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -36,6 +39,19 @@ export default async function handler(req, res) {
   const order = pad && ADAPTERS[pad] ? [ADAPTERS[pad], ...Object.values(ADAPTERS).filter(a => a !== ADAPTERS[pad])] : Object.values(ADAPTERS);
   for (const a of order) { try { const l = await a.fetchToken(ca); if (l?.ca) { launch = l; break; } } catch {} }
   if (!launch) return res.status(404).json({ error: 'not indexed' });
+
+  // PAD ATTRIBUTION. Whichever adapter answered first was also deciding the launchpad, so a bankr
+  // token that pools.trade happens to list came back labelled pools.trade. feed.js already resolves
+  // the pad from the token's deploying factory and that is authoritative — the drawer has to agree
+  // with the row, so run the same lookup here.
+  try {
+    const tags = await cachedTags([ca]);
+    const real = tags.get(ca.toLowerCase());
+    if (real && real !== launch.launchpad) {
+      if (!launch.alsoOn?.includes(launch.launchpad)) (launch.alsoOn ||= []).push(launch.launchpad);
+      launch.launchpad = real;
+    }
+  } catch {}
 
   // backfill creator/x from seen-index (list rows carry it; detail sometimes doesn't)
   if (!launch.creator || !launch.x) {

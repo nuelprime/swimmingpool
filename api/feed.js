@@ -10,6 +10,7 @@ import * as noxa from '../lib/adapters/noxa.js';
 import * as pons from '../lib/adapters/pons.js';
 import * as chain from '../lib/adapters/chain.js';
 import * as gecko from '../lib/adapters/gecko.js';
+import * as bankr from '../lib/adapters/bankr.js';
 import * as letscash from '../lib/adapters/letscash.js';
 import * as indexed from '../lib/adapters/indexed.js';
 import { valid } from '../lib/adapters/_shape.js';
@@ -39,7 +40,7 @@ const FILLABLE = KEEP.filter(f => !NEVER_FILL.has(f));
 // prices but has no idea they're pons.
 // `indexed` last: it contributes factory-discovered tokens from pads with no API of their own
 // (letscash, dontblink, arena, bankr…), which nothing else in this list can see.
-const ADAPTERS = [gecko, pools, noxa, pons, letscash, indexed];
+const ADAPTERS = [gecko, pools, noxa, pons, letscash, bankr, indexed];
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
