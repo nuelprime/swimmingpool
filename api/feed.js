@@ -176,8 +176,13 @@ export default async function handler(req, res) {
     const HAS_OWN_API = new Set(['pools.trade', 'noxa', 'pons']);
     const dexOrder = [...launches].sort((a, b) =>
       (HAS_OWN_API.has(a.launchpad) ? 1 : 0) - (HAS_OWN_API.has(b.launchpad) ? 1 : 0));
-    const dex = await dexEnrich(dexOrder.map(l => l.ca), { max: 1200 });
+    const dex = await dexEnrich(dexOrder.map(l => l.ca), { max: 2000 });
     for (const l of launches) {
+      // MCAP SANITY. gecko reports fdv as supply x price, so a token minted with 1e76 units and
+      // zero decimals lands at $6e45 and permanently tops TOP. Dexscreener declines to publish a
+      // marketCap for those at all, which is the right instinct — above this ceiling the number is
+      // an artifact of the mint, not a valuation, so drop it rather than rank on it.
+      if ((l.mcapUsd ?? 0) > 1e11) l.mcapUsd = null;
       const d = dex.get(l.ca.toLowerCase());
       if (!d) continue;
       // dexscreener reads live pool state, so it OVERRIDES rather than merely fills. Blockscout's
