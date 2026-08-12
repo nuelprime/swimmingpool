@@ -90,7 +90,9 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   const room = (ms) => timeLeft() > ms;
   const summary = {};
   // rotate one factory per invocation so each run fits the serverless time budget.
-  const all = Object.entries(FACTORIES);
+  // retired pads keep their existing rows and their labels, but stop consuming scan budget —
+  // with letscash and bankr now on their own APIs, that budget belongs to pools.fun.
+  const all = Object.entries(FACTORIES).filter(([, cfg]) => !cfg.retired);
   let targets = all;
   if (!only) {
     const turnRaw = await redis(['GET', 'idx:turn']);
