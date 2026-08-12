@@ -25,7 +25,7 @@
   --ink:#0c3d52; --dim:#5c8ba0; --faint:#8fb8c8;
   --red:#e6483d; --redbg:#fdeceb; --gold:#f4b23a; --goldbg:#fdf4de;
   --green:#0f9d58; --frog:#5cb944;
-  --card:#fff; --swoop:#dff4fb; --panel:linear-gradient(180deg,#eaf8fd,#dcf2fa);
+  --card:#fff; --swoop:#dff4fb; --hover:#e2f4fa; --panel:linear-gradient(180deg,#eaf8fd,#dcf2fa);
   --disp:'Lilita One',system-ui,sans-serif;
   --mono:'Space Mono',ui-monospace,Menlo,monospace;
 }
@@ -37,7 +37,7 @@ body.night{
   --ink:#dff4ff; --dim:#84b8cf; --faint:#4f8299;
   --red:#ff6f61; --redbg:#3b1a17; --gold:#ffc861; --goldbg:#3a2e14;
   --green:#3ddc97; --frog:#7ede5e;
-  --card:#0d2634; --swoop:#16405a;                                  /* swoop landed on hard white */
+  --card:#0d2634; --swoop:#16405a; --hover:#173d52;                                  /* swoop landed on hard white */
   --panel:linear-gradient(180deg,#12374d,#0d2837);                  /* the chart box */
 }
 body.night .caustic,body.night .caustic2{opacity:.3}
@@ -126,7 +126,7 @@ tbody tr{cursor:pointer;background:var(--card)}
 @keyframes swoop{from{background:var(--swoop);transform:translateY(-7px);opacity:.35}to{background:var(--card);transform:none;opacity:1}}
 tbody tr.fresh{animation:swoop .5s ease-out}
 tbody tr:nth-child(even){background:var(--tile)}
-tbody tr:hover{background:#e2f4fa}
+tbody tr:hover{background:var(--hover)}
 tbody tr:last-child td{border-bottom:none}
 .tk{display:flex;align-items:center;gap:9px;text-align:left;min-width:0;max-width:300px}
 .tk>div{min-width:0}
