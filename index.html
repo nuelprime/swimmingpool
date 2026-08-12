@@ -28,6 +28,23 @@
   --disp:'Lilita One',system-ui,sans-serif;
   --mono:'Space Mono',ui-monospace,Menlo,monospace;
 }
+
+/* ---------- night swim: pool lights on, water goes deep ---------- */
+body.night{
+  --water1:#1d6a94; --water2:#0d4363; --water3:#062b42;
+  --tile:#0f2c3b; --tile2:#0a212d; --grout:#123a4c; --edge:#1e5c78;
+  --ink:#dff4ff; --dim:#84b8cf; --faint:#4f8299;
+  --red:#ff6f61; --redbg:#3b1a17; --gold:#ffc861; --goldbg:#3a2e14;
+  --green:#3ddc97; --frog:#7ede5e; --card:#0d2634;
+}
+body.night .lane,body.night .deck,body.night .search input,body.night .pager .at,
+body.night table,body.night tbody tr,body.night .card{background:var(--card)}
+body.night .water{border-bottom-color:var(--tile2)}
+body.night .caustic,body.night .caustic2{opacity:.3}
+body.night .pad.unk{box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
+body.night .lanebox{border-color:var(--card)}
+body.night #night{filter:brightness(1.6)}
+
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--tile2)}
 body{font:12.5px/1.5 var(--mono);color:var(--ink);
@@ -240,6 +257,8 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 <div class="lanes">
   <button class="lane on" data-tab="new">NEW PAIRS</button>
   <button class="lane" data-tab="top">TOP</button>
+  <button class="lane" data-tab="gainers">GAINERS</button>
+  <button class="lane" id="night" title="night swim">🌙</button>
   <div class="search"><input id="q" placeholder="paste CA · dev wallet · @xhandle — press ↵" spellcheck="false"></div>
 </div>
 
@@ -347,7 +366,8 @@ function adapt(r){
     r.xUrl = r.x ? `https://x.com/${r.x}` : null;
     r.holderCount = r.holders; r.websiteUrl = r.website;
     r.buyersLast1h = r.buyers1h ?? r.buyersLast1h ?? null;
-    r.poolStats = { volume24hUsd:r.volUsd, liquidityUsd:r.liqUsd, priceChange24hPct:r.change24h, priceChange1hPct:null };
+    r.poolStats = { volume24hUsd:r.volUsd, liquidityUsd:r.liqUsd, priceChange24hPct:r.change24h,
+                    priceChange1hPct:r.change1h ?? null, priceChange6hPct:r.change6h ?? null };
   }
   return r;
 }
@@ -360,6 +380,7 @@ function derive(l){
   l._hf  = (l.holderCount!=null && l.fdvUsd>0) ? l.holderCount/(l.fdvUsd/1e3) : null;
   l._c1  = ps.priceChange1hPct ?? null;
   l._c24 = ps.priceChange24hPct ?? null;
+  l._c6  = ps.priceChange6hPct ?? null;
   return l;
 }
 function fromAuction(a){
@@ -425,7 +446,7 @@ function passes(l){
 /* ================= render ================== */
 const COLS = [
   ['token','token'],['fdvUsd','mcap'],['_vol','vol24'],
-  ['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
+  ['_c24','24h'],['_c6','6h'],['holderCount','hold'],['buyersLast1h','buy1h'],
   ['x','𝕏'],['creator','dev'],
 ];
 function header(){
@@ -446,13 +467,12 @@ function pager(total){
   const el = $('pager');
   if (!total){ el.innerHTML=''; return; }
   const pages = Math.max(1, Math.ceil(total / perPage));
-  const from = (page-1)*perPage + 1, to = Math.min(page*perPage, total);
   el.innerHTML = `
-    <button id="pgFirst" ${page<=1?'disabled':''}>« first</button>
-    <button id="pgPrev"  ${page<=1?'disabled':''}>‹ prev</button>
-    <span class="at">pools <b>${from}–${to}</b></span>
-    <button id="pgNext" ${page>=pages?'disabled':''}>next ›</button>
-    <button id="pgLast" ${page>=pages?'disabled':''}>last »</button>
+    <button id="pgFirst" ${page<=1?'disabled':''}>«</button>
+    <button id="pgPrev"  ${page<=1?'disabled':''}>‹</button>
+    <span class="at">pool <b>${page}</b> of ${pages}</span>
+    <button id="pgNext" ${page>=pages?'disabled':''}>›</button>
+    <button id="pgLast" ${page>=pages?'disabled':''}>»</button>
 `;
   const go = (n)=>{ page = Math.min(Math.max(1,n), pages); render(); window.scrollTo({top:0,behavior:'smooth'}); };
   $('pgFirst').onclick=()=>go(1); $('pgPrev').onclick=()=>go(page-1);
@@ -465,7 +485,9 @@ function render(){
   let list = src.filter(passes);
   // MOVERS. Percent move alone is a list of $2k tokens that jumped 400% on $80 of volume, so gate
   // on real depth first. 1h window comes from dexscreener, which covers every pad.
-  if (tab === 'movers') list = list.filter(l => (l.liqUsd ?? 0) >= 5000 && l._c1h != null);
+  // GAINERS. Percent move alone is a list of $2k tokens that jumped 400% on $80 of volume, so gate
+  // on real depth first. Window is 6h — dexscreener only publishes m5/h1/h6/h24, there is no 4h.
+  if (tab === 'gainers') list = list.filter(l => (l._liq ?? 0) >= 5000 && l._c6 != null);
   list.sort((a,b)=>{
     let A=sortVal(a,sort.k), B=sortVal(b,sort.k);
     if (typeof A==='string' || typeof B==='string'){ A=String(A??''); B=String(B??''); return A.localeCompare(B)*-sort.d; }
@@ -478,7 +500,7 @@ function render(){
   if (page > pages) page = pages;
   list = list.slice((page-1)*perPage, page*perPage);
   pager(total);
-  if (!total){ $('rows').innerHTML = `<tr><td colspan="8" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
+  if (!total){ $('rows').innerHTML = `<tr><td colspan="9" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
   // INCREMENTAL RENDER. Replacing tbody.innerHTML rebuilt every <tr> on every poll, so images
   // re-downloaded and the page visibly jumped — worst exactly when a new pair arrived. Instead,
@@ -492,6 +514,7 @@ function render(){
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="24h">${pct(l._c24)}</td>
+      <td data-l="6h">${pct(l._c6)}</td>
       <td data-l="hold">${num(l.holderCount)}</td>
       <td data-l="buy1h">${num(l.buyersLast1h)}</td>
       <td>${xh?`<a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="${l.xVerified?'vx':''}">@${esc(xh)}</a>`:'<span class=dimc>—</span>'}</td>
@@ -679,13 +702,23 @@ async function openCreator(q){
 document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
-  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='movers'?{k:'_c1h',d:-1}:{k:'fdvUsd',d:-1};
+  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='gainers'?{k:'_c6',d:-1}:{k:'fdvUsd',d:-1};
   page=1; render();
 });
 $('filters').addEventListener('input', ()=>{ page=1; render(); });
 $('ftoggle').onclick = () => {
   const open = document.body.classList.toggle('fopen');
   $('ftoggle').textContent = open ? 'filters ▴' : 'filters ▾';
+};
+// night is remembered, and follows the OS on a first visit
+(function(){
+  const saved = localStorage.getItem('sp.night');
+  const on = saved!=null ? saved==='1' : matchMedia('(prefers-color-scheme: dark)').matches;
+  if (on) document.body.classList.add('night');
+})();
+$('night').onclick=()=>{
+  const on = document.body.classList.toggle('night');
+  localStorage.setItem('sp.night', on?'1':'0');
 };
 $('reset').onclick=()=>{ $('filters').querySelectorAll('input').forEach(i=>i.type==='checkbox'?i.checked=false:i.value=''); page=1; render(); };
 function runSearch(){
