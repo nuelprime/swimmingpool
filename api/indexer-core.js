@@ -36,9 +36,9 @@ function decodeParams(ev) {
 }
 
 // read one factory's logs, newest first, until we pass `stopBlock` (last-seen) or hit maxPages
-async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
+async function readFactory(factoryAddr, cfg, stopBlock, maxPages, startParams = null) {
   const tokens = [];
-  let params = null, pages = 0, newestBlock = stopBlock;
+  let params = startParams, pages = 0, newestBlock = stopBlock;
   do {
     const q = params ? `?block_number=${params.block_number}&index=${params.index}&items_count=${params.items_count}` : '';
     let d;
@@ -78,7 +78,7 @@ async function readFactory(factoryAddr, cfg, stopBlock, maxPages) {
     pages++;
     if (stopBlock && items.some(e => (e.block_number || 0) <= stopBlock)) break;
   } while (params && pages < maxPages);
-  return { tokens, newestBlock };
+  return { tokens, newestBlock, nextParams: params };
 }
 
 const DEADLINE_MS = 45_000;   // Vercel kills at 60s; leave headroom to finish and respond
@@ -133,6 +133,38 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
       await redis(hset);
     }
     if (res.newestBlock > last) await redis(['SET', cursorKey, String(res.newestBlock)]);
+
+    // DEEP BACKFILL, ON ITS OWN CURSOR. The live cursor above only ever looks at the newest two
+    // pages. On a factory's first run we read three pages and then jumped the cursor to the newest
+    // block, which made every event older than those 150 logs permanently unreachable — letscash
+    // has 4,633 factory txs and we were serving 113 of them. This leg walks backward instead,
+    // resuming from a saved next_page_params each tick until the factory's history is exhausted.
+    const backKey = `idx:back:${addr}`;
+    const backRaw = await redis(['GET', backKey]);
+    if (backRaw !== 'done' && Date.now() - startedAt < DEADLINE_MS - 12_000) {
+      let startParams = null;
+      if (backRaw) { try { startParams = JSON.parse(backRaw); } catch {} }
+      else startParams = res.nextParams || null;      // seed from where the live leg stopped
+      if (startParams) {
+        let b;
+        try { b = await readFactory(addr, cfg, 0, 4, startParams); } catch { b = null; }
+        if (b) {
+          if (b.tokens.length) {
+            const ex = await redis(['HMGET', 'idx:tokens', ...b.tokens.map(t => t.ca)]);
+            const hs = ['HSET', 'idx:tokens'];
+            b.tokens.forEach((t, i) => {
+              const prevRaw = Array.isArray(ex) ? ex[i] : null;
+              if (prevRaw) { try { const pv = JSON.parse(prevRaw);
+                for (const k of Object.keys(pv)) if (t[k] == null && pv[k] != null) t[k] = pv[k]; } catch {} }
+              hs.push(t.ca, JSON.stringify(t));
+            });
+            await redis(hs);
+          }
+          await redis(['SET', backKey, b.nextParams ? JSON.stringify(b.nextParams) : 'done']);
+          summary[cfg.launchpad + ':back'] = b.tokens.length;
+        }
+      } else await redis(['SET', backKey, 'done']);
+    }
     summary[cfg.launchpad] = res.tokens.length;
   }
   // stamp as soon as the factory read is done — everything after this is optional polish,

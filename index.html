@@ -439,7 +439,8 @@ const sortVal = (l,k) =>
 // each poll, so the incremental renderer had to diff the whole table to update a handful of cells.
 // Render a window instead. Page resets to 1 on any filter, sort or tab change — staying on page 7
 // after narrowing to twelve results would just show an empty table.
-let page = 1, perPage = Number(localStorage.getItem('sp.perPage')) || 100;
+let page = 1;
+const perPage = 67;
 
 function pager(total){
   const el = $('pager');
@@ -449,20 +450,22 @@ function pager(total){
   el.innerHTML = `
     <button id="pgFirst" ${page<=1?'disabled':''}>« first</button>
     <button id="pgPrev"  ${page<=1?'disabled':''}>‹ prev</button>
-    <span class="at">lane <b>${page}</b> / ${pages} · showing <b>${from}–${to}</b> of ${total}</span>
+    <span class="at">pools <b>${from}–${to}</b></span>
     <button id="pgNext" ${page>=pages?'disabled':''}>next ›</button>
     <button id="pgLast" ${page>=pages?'disabled':''}>last »</button>
-    <select id="pgSize">${[25,50,100,250,500].map(n=>`<option value="${n}" ${n===perPage?'selected':''}>${n} / lane</option>`).join('')}</select>`;
+`;
   const go = (n)=>{ page = Math.min(Math.max(1,n), pages); render(); window.scrollTo({top:0,behavior:'smooth'}); };
   $('pgFirst').onclick=()=>go(1); $('pgPrev').onclick=()=>go(page-1);
   $('pgNext').onclick=()=>go(page+1); $('pgLast').onclick=()=>go(pages);
-  $('pgSize').onchange=(e)=>{ perPage=Number(e.target.value); localStorage.setItem('sp.perPage',perPage); page=1; render(); };
 }
 
 function render(){
   header();
   const src = feed.launches.slice();
   let list = src.filter(passes);
+  // MOVERS. Percent move alone is a list of $2k tokens that jumped 400% on $80 of volume, so gate
+  // on real depth first. 1h window comes from dexscreener, which covers every pad.
+  if (tab === 'movers') list = list.filter(l => (l.liqUsd ?? 0) >= 5000 && l._c1h != null);
   list.sort((a,b)=>{
     let A=sortVal(a,sort.k), B=sortVal(b,sort.k);
     if (typeof A==='string' || typeof B==='string'){ A=String(A??''); B=String(B??''); return A.localeCompare(B)*-sort.d; }
@@ -676,7 +679,7 @@ async function openCreator(q){
 document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
-  sort = tab==='new'?{k:'createdAt',d:-1}:{k:'fdvUsd',d:-1};
+  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='movers'?{k:'_c1h',d:-1}:{k:'fdvUsd',d:-1};
   page=1; render();
 });
 $('filters').addEventListener('input', ()=>{ page=1; render(); });
