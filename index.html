@@ -447,7 +447,7 @@ function passes(l){
 /* ================= render ================== */
 const COLS = [
   ['token','token'],['fdvUsd','mcap'],['_vol','vol24'],
-  ['_c24','24h'],['_c6','6h'],['holderCount','hold'],['buyersLast1h','buy1h'],
+  ['_c24','24h'],['holderCount','hold'],['buyersLast1h','buy1h'],
   ['x','𝕏'],['creator','dev'],
 ];
 function header(){
@@ -501,7 +501,7 @@ function render(){
   if (page > pages) page = pages;
   list = list.slice((page-1)*perPage, page*perPage);
   pager(total);
-  if (!total){ $('rows').innerHTML = `<tr><td colspan="9" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
+  if (!total){ $('rows').innerHTML = `<tr><td colspan="8" class="dimc" style="text-align:center;padding:34px">nothing survives these filters — pool's empty 🐸</td></tr>`; return; }
 
   // INCREMENTAL RENDER. Replacing tbody.innerHTML rebuilt every <tr> on every poll, so images
   // re-downloaded and the page visibly jumped — worst exactly when a new pair arrived. Instead,
@@ -515,7 +515,6 @@ function render(){
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="24h">${pct(l._c24)}</td>
-      <td data-l="6h">${pct(l._c6)}</td>
       <td data-l="hold">${num(l.holderCount)}</td>
       <td data-l="buy1h">${num(l.buyersLast1h)}</td>
       <td>${xh?`<a href="https://x.com/${esc(xh)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="${l.xVerified?'vx':''}">@${esc(xh)}</a>`:'<span class=dimc>—</span>'}</td>

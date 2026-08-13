@@ -204,6 +204,33 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
 
   if (!room(10_000)) return { ...summary, _skipped: 'tags/holders/devs', _ms: Date.now() - startedAt };
 
+  // RETIRE HISTORY. Marking a factory `retired` only stops future scans — its rows stay in
+  // idx:tokens and keep being served, so dontblink was still shipping 59 tokens. Delete them once
+  // and remember it: HGETALL on the whole index is not something to repeat every five minutes.
+  try {
+    const retired = new Set(
+      Object.values(FACTORIES).filter(c => c.retired).map(c => c.launchpad)
+    );
+    if (retired.size) {
+      const stamp = `idx:retired:${[...retired].sort().join(',')}`;
+      const already = await redis(['GET', stamp]);
+      if (!already) {
+        const rows = await redis(['HGETALL', 'idx:tokens']);
+        const kill = [];
+        if (Array.isArray(rows)) {
+          for (let i = 0; i < rows.length; i += 2) {
+            try { if (retired.has(JSON.parse(rows[i + 1]).launchpad)) kill.push(rows[i]); } catch {}
+          }
+        }
+        for (let i = 0; i < kill.length; i += 200) {
+          await redis(['HDEL', 'idx:tokens', ...kill.slice(i, i + 200)]);
+        }
+        await redis(['SET', stamp, String(Date.now())]);
+        summary.retired = { pads: [...retired], removed: kill.length };
+      }
+    }
+  } catch {}
+
   // TAG RESOLUTION — give the launchpad tag cache a push each run using whatever the
   // feed most recently served (seen:v2). One Blockscout call per token, cached forever.
   try {

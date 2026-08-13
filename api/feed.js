@@ -41,6 +41,22 @@ const FILLABLE = KEEP.filter(f => !NEVER_FILL.has(f));
 // `indexed` last: it contributes factory-discovered tokens from pads with no API of their own
 // (letscash, dontblink, arena, bankr…), which nothing else in this list can see.
 const ADAPTERS = [gecko, pools, noxa, pons, letscash, bankr, indexed];
+
+// NOT MEMECOINS, OR NOT REAL. Excluded after the merge so they cannot rank, be filtered to, or be
+// counted in the pad dropdown.
+//   0x4783c67b… is the tokenized-equity issuer this repo already documents in factories.js
+//   ("deployed(uid,stock,…)"). It minted NVDA/SPY/SPCX/USO/GME with 13k-38k holders each — RWAs,
+//   not launches. Filtered by ISSUER and not by ticker on purpose: the other GME/AMC/HOOD/PLTR rows
+//   are real memecoins by real degens and they stay.
+//   DOGO is $8M/day of wash volume through a relay of single-use wallets — the number is fake.
+//   dontblink is retired: retiring its factory stopped new scans but left 59 indexed rows serving.
+const EXCLUDE_CREATORS = new Set(['0x4783c67b63de2b358ac5951a7d41f47a38f3c046']);
+const EXCLUDE_CAS = new Set(['0x77b0aa38451ccdc1b42587e2f80b9879a7f82356']);
+const EXCLUDE_PADS = new Set(['dontblink']);
+const excluded = (l) =>
+  EXCLUDE_CAS.has((l.ca || '').toLowerCase()) ||
+  EXCLUDE_CREATORS.has((l.creator || '').toLowerCase()) ||
+  EXCLUDE_PADS.has(l.launchpad);
 const TTL = 30;
 
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -176,6 +192,7 @@ export default async function handler(req, res) {
     // (the ones with an API at least have mcap without this), and cover the whole feed. At 30
     // addresses per request even 1,200 tokens is ~40 cheap calls.
     const HAS_OWN_API = new Set(['pools.trade', 'noxa', 'pons']);
+    launches = launches.filter(l => !excluded(l));   // before enrichment: don't pay to price them
     const dexOrder = [...launches].sort((a, b) =>
       (HAS_OWN_API.has(a.launchpad) ? 1 : 0) - (HAS_OWN_API.has(b.launchpad) ? 1 : 0));
     const dex = await dexEnrich(dexOrder.map(l => l.ca), { max: 2000 });
@@ -192,6 +209,10 @@ export default async function handler(req, res) {
       if (d.volUsd != null) l.volUsd = d.volUsd;
       if (d.liqUsd != null) l.liqUsd = d.liqUsd;
       if (d.change24h != null) l.change24h = d.change24h;
+      // 1h/6h were captured in dex.js and whitelisted in KEEP, but never copied onto the row — so
+      // MOVERS only ever contained bankr, the one adapter that reports 6h natively.
+      if (d.change1h != null) l.change1h = d.change1h;
+      if (d.change6h != null) l.change6h = d.change6h;
       if (d.mcapUsd != null) l.mcapUsd = d.mcapUsd;
       else if (l._fromChain) l.mcapUsd = l.mcapUsd;   // no dex pool → keep chain value as-is
       // media + socials: pools.trade ships emoji rather than logos, pons/noxa lists have no X
