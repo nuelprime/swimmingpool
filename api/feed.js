@@ -350,6 +350,13 @@ export default async function handler(req, res) {
 
   // SLIM THE PAYLOAD — strip internal bookkeeping (_pool, _factory, _fromChain, dexed…) and
   // fields the frontend never reads. 700+ tokens was ~420KB, most of it dead weight on mobile.
+  // SECOND EXCLUSION PASS. The first one runs straight after the merge, before enrichment, so we
+  // don't pay dexscreener to price rows we're dropping. But at that point `creator` is still null
+  // (cachedDevs fills it at stage 2.7) and the authoritative launchpad tag hasn't resolved yet
+  // (stage 2), so issuer- and pad-based rules had nothing to match on: five RWA rows and one
+  // dontblink row walked straight through. Re-apply now that identity is actually known.
+  launches = launches.filter(l => !excluded(l));
+
   const slim = launches.map(l => {
     const o = {};
     for (const k of KEEP) if (l[k] !== null && l[k] !== undefined) o[k] = l[k];
