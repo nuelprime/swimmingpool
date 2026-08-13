@@ -103,7 +103,12 @@ export default async function handler(req, res) {
     }
   });
 
-  const launches = [...merged.values()];
+  // NOT const: the exclusion below rebinds this. It used to be filtered inside the enrichment
+  // try/catch, where `Assignment to constant variable` was thrown and swallowed on every request —
+  // taking the exclusions, the market-cap clamp and the whole dexscreener pass down with it.
+  // Exclusion happens here now, outside any try, where it cannot fail quietly.
+  let launches = [...merged.values()];
+  launches = launches.filter(l => !excluded(l));
   const degraded = results.some(s => s.status === 'rejected');
 
   // 2) AUTHORITATIVE LAUNCHPAD TAG — the factory that deployed the contract, from the
@@ -192,7 +197,6 @@ export default async function handler(req, res) {
     // (the ones with an API at least have mcap without this), and cover the whole feed. At 30
     // addresses per request even 1,200 tokens is ~40 cheap calls.
     const HAS_OWN_API = new Set(['pools.trade', 'noxa', 'pons']);
-    launches = launches.filter(l => !excluded(l));   // before enrichment: don't pay to price them
     const dexOrder = [...launches].sort((a, b) =>
       (HAS_OWN_API.has(a.launchpad) ? 1 : 0) - (HAS_OWN_API.has(b.launchpad) ? 1 : 0));
     const dex = await dexEnrich(dexOrder.map(l => l.ca), { max: 2000 });
@@ -222,7 +226,7 @@ export default async function handler(req, res) {
       if (!l.website && d.website) l.website = d.website;
       l.dexed = true;
     }
-  } catch {}
+  } catch (e) { console.error('[feed] enrichment stage failed:', e); }
 
   // 2.6) HOLDERS — only pools.trade exposes them; Blockscout covers every pad. Cache-only read
   // here so the feed never waits on network; the indexer fills the cache in the background.
