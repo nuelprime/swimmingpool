@@ -226,6 +226,19 @@ export default async function handler(req, res) {
       if (!l.website && d.website) l.website = d.website;
       l.dexed = true;
     }
+
+    // MARKET CAP NEEDS LIQUIDITY BEHIND IT. The $100B ceiling above catches mints with absurd
+    // supply, but not this: TESTICLES has one pool holding $19.02, which puts the marginal price at
+    // $3.91, and 1B supply x $3.91 = $3.9B. Dexscreener reports that number itself and it is
+    // arithmetically correct — a market cap you could move to zero with a $20 sell is just not a
+    // valuation. Measured across the feed, real tokens sit at 1x-4x mcap/liq (CASHCAT, the largest
+    // at $160M, is 148x) and the artifacts start at 200,000,000x. 50,000x sits in the empty gap and
+    // catches three rows, none with meaningful volume. Only applied where liquidity is actually
+    // known — a bonding-curve row with no pool yet keeps the pad's own figure.
+    for (const l of launches) {
+      if (l.mcapUsd == null || l.liqUsd == null) continue;
+      if (l.liqUsd <= 0 || l.mcapUsd / l.liqUsd > 50_000) l.mcapUsd = null;
+    }
   } catch (e) { console.error('[feed] enrichment stage failed:', e); }
 
   // 2.6) HOLDERS — only pools.trade exposes them; Blockscout covers every pad. Cache-only read
