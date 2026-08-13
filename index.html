@@ -428,7 +428,7 @@ function populatePads(){
   const cur=sel.value;
   const pads=feed.byPad||{};
   const opts=['<option value="">all launchpads</option>'].concat(
-    Object.keys(pads).sort((a,b)=>pads[b]-pads[a]).map(p=>`<option value="${esc(p)}">${esc(p)} (${pads[p]})</option>`));
+    Object.keys(pads).sort((a,b)=>pads[b]-pads[a]).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`));
   sel.innerHTML=opts.join(''); sel.value=cur;
 }
 function passes(l){
