@@ -310,7 +310,14 @@ const REFRESH = 30_000;
 /* ================= state ================== */
 let feed = { launches: [], auctions: [] };
 let tab = 'movers';
-let sort = { k: 'createdAt', d: -1 };
+// One source of truth for a tab's default ordering. These used to be written in two places — the
+// initial value here and the tab click handler — and when MOVERS became the landing tab only the
+// handler was updated, so a fresh load rendered MOVERS sorted by age and it filled up with
+// whatever launched in the last hour. Both callers read this now.
+const sortFor = (t) => t === 'new'    ? { k: 'createdAt', d: -1 }
+                     : t === 'movers' ? { k: '_c6',       d: -1 }
+                     :                  { k: 'fdvUsd',    d: -1 };
+let sort = sortFor(tab);
 
 /* ================= utils ================== */
 const $ = id => document.getElementById(id);
@@ -709,7 +716,7 @@ async function openCreator(q){
 document.querySelectorAll('.lanes [data-tab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.lanes [data-tab]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); tab=b.dataset.tab;
-  sort = tab==='new'?{k:'createdAt',d:-1}:tab==='movers'?{k:'_c6',d:-1}:{k:'fdvUsd',d:-1};
+  sort = sortFor(tab);
   page=1; render();
 });
 $('filters').addEventListener('input', ()=>{ page=1; render(); });
