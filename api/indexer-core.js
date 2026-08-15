@@ -147,6 +147,43 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   const startedAt = Date.now();
   const timeLeft = () => DEADLINE_MS - (Date.now() - startedAt);
   const room = (ms) => timeLeft() > ms;
+
+  // TAIL WORKERS, ROTATED AND RUN FIRST. holders, devs and origins used to run after the symbol
+  // sweep, and once the letscash backfill pushed the unnamed queue past 12,000 the sweep plus the
+  // factory scans consumed the entire 45s budget — so all three were skipped every single tick and
+  // origins, being last, never ran once. They read worklists the feed publishes, so they don't
+  // depend on anything the later stages compute; the only reason they were down there was order of
+  // writing. One runs per tick, round-robin, the same way factories already rotate. The symbol
+  // sweep keeps whatever time is left, which is the right trade: its backlog needs ~150 runs
+  // either way, while these three are what the page actually shows.
+  //
+  // They run BEFORE the factory scans, not after. The scans reached 35s on their own once the deep
+  // backfill was walking two pads at four pages each, which tripped the room(12_000) guard and
+  // returned early — so anything sitting behind that guard was skipped every tick no matter how it
+  // was ordered among itself. The scans have their own deadline check and are a multi-hour job;
+  // losing a few backfill pages a tick costs nothing, being permanently skipped costs everything.
+  try {
+    const turn = Number(await redis(['GET', 'idx:tail'])) || 0;
+    const worker = ['holders', 'devs', 'origins'][turn % 3];
+    const list = async (key) => {
+      try { const raw = await redis(['GET', key]); const l = raw ? JSON.parse(raw) : null;
+            return Array.isArray(l) && l.length ? l : null; } catch { return null; }
+    };
+    if (worker === 'holders') {
+      const t = await list('need:holders');
+      if (t && room(6_000)) summary._holders = await resolveHolders(t, 150);
+    } else if (worker === 'devs') {
+      const t = await list('need:devs');
+      if (t && room(5_000)) summary._devs = await resolveDevs(t, 12);
+    } else {
+      const t = await list('need:origins');
+      // 12, not 40: Blockscout answers about 1.4/sec at four lanes, so 40 would be ~28s of a 45s
+      // budget on its own — the batch that never fits is worth less than the batch that always does
+      if (t && room(6_000)) summary._origins = await resolveOrigins(t, 12);
+    }
+    summary._tail = worker;
+    await redis(['SET', 'idx:tail', String((turn + 1) % 3)]);
+  } catch {}
   const summary = {};
   // rotate one factory per invocation so each run fits the serverless time budget.
   // retired pads keep their existing rows and their labels, but stop consuming scan budget —
@@ -236,36 +273,6 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   // function returns cleanly rather than being killed mid-flight.
   if (!room(12_000)) return { ...summary, _skipped: 'identity/tags/holders/devs', _ms: Date.now() - startedAt };
 
-  // TAIL WORKERS, ROTATED AND MOVED UP. holders, devs and origins used to run after the symbol
-  // sweep, and once the letscash backfill pushed the unnamed queue past 12,000 the sweep plus the
-  // factory scans consumed the entire 45s budget — so all three were skipped every single tick and
-  // origins, being last, never ran once. They read worklists the feed publishes, so they don't
-  // depend on anything the later stages compute; the only reason they were down there was order of
-  // writing. One runs per tick, round-robin, the same way factories already rotate. The symbol
-  // sweep keeps whatever time is left, which is the right trade: its backlog needs ~150 runs
-  // either way, while these three are what the page actually shows.
-  try {
-    const turn = Number(await redis(['GET', 'idx:tail'])) || 0;
-    const worker = ['holders', 'devs', 'origins'][turn % 3];
-    const list = async (key) => {
-      try { const raw = await redis(['GET', key]); const l = raw ? JSON.parse(raw) : null;
-            return Array.isArray(l) && l.length ? l : null; } catch { return null; }
-    };
-    if (worker === 'holders') {
-      const t = await list('need:holders');
-      if (t && room(6_000)) summary._holders = await resolveHolders(t, 150);
-    } else if (worker === 'devs') {
-      const t = await list('need:devs');
-      if (t && room(5_000)) summary._devs = await resolveDevs(t, 12);
-    } else {
-      const t = await list('need:origins');
-      // 12, not 40: Blockscout answers about 1.4/sec at four lanes, so 40 would be ~28s of a 45s
-      // budget on its own — the batch that never fits is worth less than the batch that always does
-      if (t && room(6_000)) summary._origins = await resolveOrigins(t, 12);
-    }
-    summary._tail = worker;
-    await redis(['SET', 'idx:tail', String((turn + 1) % 3)]);
-  } catch {}
 
   // PROGRESSIVE IDENTITY BACKFILL — name tokens already in the index that still lack a symbol,
   // so the feed's quality gate lets more of them through each tick instead of them sitting unrenderable.

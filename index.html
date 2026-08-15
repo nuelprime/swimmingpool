@@ -136,7 +136,7 @@ tbody tr:last-child td{border-bottom:none}
 .tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .pad{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
 .pad img{width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge);background:var(--card)}
-.pad.unk.org{font-size:8px;letter-spacing:-.3px}
+.pad.unk.org{font-size:0}
 .pad.unk{width:16px;height:16px;border-radius:50%;background:var(--faint);color:#fff;font-size:9px;font-weight:700;
   box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
 .tk .nm{color:var(--faint);font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -392,9 +392,11 @@ const padLogo = (p, row)=>{
   const src = PADIMG[p];
   if (src) return `<span class="pad" title="${esc(p)}"><img src="${src}" alt=""></span>`;
   if (row && row.origin && row.originN > 1){
-    const n = row.originN > 99 ? '99+' : String(row.originN);
+    // No count in the row — the colour is the signal, and a number here competes with every other
+    // number in the table. Same circle as a real pad badge, just coloured. The count lives in the
+    // drawer, where there's room to say what it means.
     const t = `${row.originN} tokens from ${row.origin}`;
-    return `<span class="pad unk org" style="${originStyle(row.origin)}" title="${esc(t)}">${n}</span>`;
+    return `<span class="pad unk org" style="${originStyle(row.origin)}" title="${esc(t)}"></span>`;
   }
   return `<span class="pad unk" title="${esc(p||'unknown launchpad')}">?</span>`;
 };
