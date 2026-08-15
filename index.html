@@ -257,9 +257,9 @@ footer .no{font-family:var(--disp);color:var(--red);letter-spacing:.06em}
 </div>
 
 <div class="lanes">
-  <button class="lane on" data-tab="new">NEW PAIRS</button>
+  <button class="lane on" data-tab="movers">MOVERS</button>
+  <button class="lane" data-tab="new">NEW PAIRS</button>
   <button class="lane" data-tab="top">TOP</button>
-  <button class="lane" data-tab="movers">MOVERS</button>
   <div class="search"><input id="q" placeholder="paste CA · dev wallet · @xhandle — press ↵" spellcheck="false"></div>
 </div>
 
@@ -309,7 +309,7 @@ const REFRESH = 30_000;
 
 /* ================= state ================== */
 let feed = { launches: [], auctions: [] };
-let tab = 'new';
+let tab = 'movers';
 let sort = { k: 'createdAt', d: -1 };
 
 /* ================= utils ================== */
@@ -351,6 +351,7 @@ const PADSITE = {
   // their tokens are actually viewed (login-walled, but that's their design).
   'dontblink':   ca=>`https://fomo.family/tokens/robinhood/${ca}`,
   'bankr':       ca=>`https://bankr.bot/token/${ca}`,
+  'lemon':       ca=>`https://lemon.fun/terminal/${ca}`,
 };
 const DEXICON = 'data:image/png;base64,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';
 
@@ -403,7 +404,7 @@ async function load(){
   try{
     if (DEMO){ feed = MOCK; }
     else {
-      const r = await fetch(API+'/feed');
+      const r = await fetch(API+'/feed', { cache: 'no-store' });
       if(!r.ok) throw new Error('feed '+r.status);
       const j = await r.json();
       if(!Array.isArray(j.launches)) throw new Error('shape drift: launches');
@@ -756,6 +757,8 @@ const t0 = Date.now();
 let firstPaint = true;
 load();
 setInterval(load, REFRESH);
+// and refetch the moment the tab comes back, rather than waiting out the poll interval
+document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) load(); });
 </script>
 </body>
 </html>
