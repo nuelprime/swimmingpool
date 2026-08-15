@@ -9,6 +9,7 @@ import { tokenIdentity } from '../lib/onchain.js';
 import { resolveTags } from '../lib/tagger.js';
 import { resolveHolders } from '../lib/holders.js';
 import { resolveDevs } from '../lib/devs.js';
+import { resolveOrigins } from '../lib/origins.js';
 
 const BS = 'https://robinhoodchain.blockscout.com/api/v2';
 const R_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -314,6 +315,15 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
         if (raw) { const l = JSON.parse(raw); if (Array.isArray(l) && l.length) devTargets = l; }
       } catch {}
       if (room(5_000)) summary._devs = await resolveDevs(devTargets, 12);
+
+      // origins: which contract deployed each no-pad token, so repeat deployers can be clustered
+      try {
+        const raw = await redis(['GET', 'need:origins']);
+        const list = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(list) && list.length && room(6_000)) {
+          summary._origins = await resolveOrigins(list, 40);
+        }
+      } catch {}
       if (t.newPads.length) summary._newFactories = t.newPads;
     }
   } catch {}

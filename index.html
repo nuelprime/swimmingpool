@@ -136,6 +136,7 @@ tbody tr:last-child td{border-bottom:none}
 .tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .pad{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
 .pad img{width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge);background:var(--card)}
+.pad.unk.org{font-size:8px;letter-spacing:-.3px}
 .pad.unk{width:16px;height:16px;border-radius:50%;background:var(--faint);color:#fff;font-size:9px;font-weight:700;
   box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
 .tk .nm{color:var(--faint);font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -368,9 +369,33 @@ const PADSITE = {
 };
 const DEXICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAALyUlEQVR42p2Ya1CUV5rHf+d9+36hm0s3IAFB7mvkIpCAo4lmvDFVW6VOuTNxauNmaq0JbtxJzW5VPqV2Ml9G3MpuRh1HyayYiXE0ccd18II3TM1qYuItxKhJmp2kERtoEWyElr69Zz8gbZAGMU9VV79db59z/ud5/s//POcRjJpwOByOWCz2nKaxUtPkIiGYAQimMCFEwmcAKWXC50ksBtwAeUbTdO+GQuIcBAKAFAAuV1L+0FDsH0CuAmaCMAK6yYERx65pGpqmIaXGGA4hBEIIFEVBUZTpgJRATEoZAr4RQhyw2dS3b90a7BCQ7DCbw/8KvALYmIZJObqgxWImLy+PwsICcnKysduTABgcvEt3t4/r16/T0fF/hMPhCR5+hA0BbxoMujd0RmOoVkplpRDSBmiAMjU4ic1mpaSklGXLljJvXh15eXlkZmZiMpkAGBkZwe+/RUeHh08+Oc+JEydpb28nGAxOB5x231GrYrHYZWE2W96RkpVCCMtYBCfjm5SStLRUVq9ezU9+soaSkmIsFmsc+IMQP+BkKBTi6tWrvPvuHg4cOEBPTw9CKPGQj31/y8P3Z5HDQigHVb3e8B9CiGRA/TY4VVVRVQVNk3FOzZgxgw0bNvDyy+vJz89HrzeM49YosPEb0+l0ZGRkUFU1F5PJzBdffMnw8HD8vdFoRFEUNE3jWw4SIBQpcal6veGNh8GNTVxZWYHT6cTv7yUrK4sNGzawdu3fk5qaipQPgE/1GTOr1UpJSTFms4Vr164RCAQoLCwkOzub/v5+otHow0FThMCu6vWG1x8GJ4QgHA5TUVHJsmXLMBoNrFq1khdeeIGUlJQ4uOnaGD3MZjOFhQVEIlGk1Kivr6e//zbXr38Rz/YJQ81mq5xswtTUVNavX8+SJYuZNSsPp9M5wTOPY6M8lfj9fjweD2fOfMi2bdu4fft2fM0JbpxsIiEEfX197N+/n1u3+nA4HCiK8p3BjW1cURRcLjf37o1w8OBB+vr6JgUHoOr1hl9ONqGiKNy7d4+Ojg6ysrLIzs6Oh+JxgY4BiEQinD59msbGTXg8HsLh8JTjpgSYlGRn1aqVhEJhTp48RXp6Onl5eeh06mPxcOy/kUiE48dP0Ni4CbvdTk1NNV9//TWhUPjxAAoh0DRJUVERP//5P7NgwQI+/vgcp061IQTMnDkTi8XyWKEdGBjgT3/6H7Zu/S1Wq4VXX32V0tJSzp+/QG9v72RJMtWpoeFyuUhPT6e29mmWL1/OV199xa9/3UhT01t0dt6YILaTFQs3btzgd7/bzsaNG/F4PCxfvpza2qeZMSOTjIyMb2vgBNNNdd6mpCTjcDiIRqPEYhqZmRnYbHb27dtHe3s7r7zyCpWVFRiNxji/hBDodDqEEIRCIT777DN27GjiwoULuN1uLBYLmhYjFothNpuxWq1Ten8SgGO6ZcFkMsWz12q18tOfvsjg4CA7dzbzi1/8Cy++uJbly5czMDDA+fMX0et11NRUY7VaOX78BH/4wzsEg8OsXbsWp9PJzp0745y0WCxYrdb7vyFRIusmr37uB1qTGAwGSkuLiUQi+Hw+1q37R4qLi9i9ew+bN2/hxImT3L17l9u3+xFC4HA4sNmsdHbeoKysjDVrfsyTT85h69Yt+P23mDWrAL1ej8FgwGw2xSP2WByUUmIyGTEajQghKC8vp7Kygvfee48tW7aiKCrPPPMMiqLy5z+3cPfuMC+//E+sX99AOBzmyJGjqKpKbW0tkUiUpqYmDh5sYd68edTUVKMoCkajEZPJPKUi6BJl3JigpqWlkZRkR0qJy+WioWE9qqrj0KFDnDlzFlVVuHPnDvn5+TQ0/Iwf/ejvUBQFk8lEX18ffr+fvXv3EY1GCQaHmT//ezQ0NJCRkY6UGgaDYZwaJBJs3WTeczgcuN3u+5KjoSgK5eXl/OpXr3P16lVu3vTR0dGB19vJ/PnfY9mypXGp+P73n6OtrY3W1mMsXPgsBQX5ZGZmMnv2bNLSUuNAFEXB7XZht9sJhULTD/GYxzIzMx7yqsDlcrFw4UKef/7HVFVVodcbmD37b0hLS4uPT0tL48kn52A2WygvL2PNmudZtGghbrcrnnBjIc3JySErKwtNk9MHqGkaeXm5lJQUJ9S2UdE9QFPTW/Gy/2HLz59FSoqT3bt309LSwp07dxJqZmFhIbm5M5EyNv2TRK/XU19fz8qVK1FVdRxHAoEAb7/9Dhs3bqS/v5+XXvoZS5YsxWazIIQSD5/T6cBoNHLo0BFaW1sBKCjIx2azjQPpdDq4du06Fy9eSijYSiLvpaenU11dzZUrn3H9+hfxkIxmm4LBoMduT0JVVSwWC3a7Pa6dYxlpt9sxGExomobVasNut6Oq6rhC1+PxcOXKFcrLy0hPdxOLxR7tQUVRqK6uJisri5aWFnJycsjPz4970Gg0UlpaTHFxMVevfs7p06fJyMigpKQEEAgxusnDh4/y5pv/idudzmuvvcaKFX9LUpJjnJxcunSZXbt2odPp8Pl8dHf3TJCbcQDHrpIpKSm0tbXhcDj44Q9XkZKSMq7EMhiMzJqVR25uHmfPnuXateuUlc0hIyMDEFy8eInGxk0IIXj99V+yaNFC9Hr9BC5LKTl6tJXDh48QiUQZGhoiFouNA6k8rIEjIyEuX/4Uv7+PqqpqcnNzE1bRQijU1taybt06bt7soqXlEMHgPYaGhmhpacHr7WTt2rXU1dUmGDs6X17eLCoqKvD7b9HZ2TkBXEIOSikJBoNUVJTzgx/UMzIywscffzLhTisl6PU6lixZTE1NDceOHeObb77B4/Fw9GgrTz1Vw5Ili9HpdBMyd2ho+P6cwyxYMJ/S0uJJC9eESeJwOFi6dCkul4udO5tpbNzEzZs3J5zXYwlVX19PNBqjpeUQH3zwAdFolMWLl/DEEzMSHmM+n4/Gxk00N+8iOzuHFStWkJycnDCLJ5wkOp2Ouro6iooK2b59B83NzYDk8uXL5ObmotfrCQaD+Hw+srOzMRgMPPvsAo4cOUxz804sFitlZXN47rlnEUIhGo3S39+PzWbDYrEQiUT49NNLXLhwnvb2dnp7e6mpqebpp5/i1Km2CZmsPOw9p9NJQUE+zc3NbNv2W/x+P4HAIMePn2BgYIBYLMapU21s3ryFrq4uAFJSUqmqmsvg4CA+n4+qqipmzMhCSonX62XTpn/n2LHjSCkJBAY5ebKNQCBAd3c3O3Y08fvf/xdpaalYrdYJXtQ9LDHBYJD333+fQCBAOBxBURTC4TAffvgRFy5cpLKygoMHD9Laeozs7GwaGl7CarVSVzePrKwsYjGNurpaFGVU1Pfv/2/++Me99z1Vg9fr5fz5C4yMhFBVleHhYf7yl//FZDISDN6bUPpP0MFoNMrwcJBY7AF3hBDcvXuX5GQnwWCQvXv30dV1A5/PR1FREYWFheh0OjweD5mZmaxevRqLxcyZM2fZunUrXq+XgYEBnngii8uXP+Xo0VY0TYtns6Zpk16cVL3e8G8PdxYSXWA0LUZ//wDt7e10dHQAgsHBAMPDw5SVzcHtdmM2mygqKqa4uIi//vVrNm/ewkcfnUNKjaGhIXy+bj7//HN6enomrJFgTQloqk5nWCcElke13cbOYb/fH+eJlNDZeYNYLEZlZSWFhYXMnJlDKBRi+/bt7Nmzh3A4HJeZnp5e+vtvT/e6GgW6VL3eOBdkAQj9VO23yUCHw2G83k7sdhtz585FCEFz8y6amt5iYGBg0uvkI7qtSClHhFCOqyaTQUhJFeC6//KxWgaKojA0NERX103c7nQ6Ozv5zW824/V6E4r0NAEqoHikVN5QzWZzdyymJQNzAeN37bkEAgE8Hg/nzp3jyy+/ut+3lt9pOmBICHaNjKjvq6FQaCQ52ewNh2VISpkKWIUQyoNG4vRM0zR6e3vo7u6etDp+NOfkPaADxC6bTd0VDA52qwDBYOhONGq5pKrKNUXRDCCcQNKjEidRuEf39p06cz2KorSC2GYw6Pb09w92A/w/fqMdKWHicKsAAAAASUVORK5CYII=';
 
-const padLogo = (p)=>{
+// KNOWN UNKNOWNS. A no-pad token used to be an anonymous grey "?" and every one looked alike, so a
+// deployer quietly minting seventy-nine of them was invisible. When the feed reports that a token's
+// deploying contract also made others, the chip takes that contract's colour and shows the count
+// instead of the "?" — same colour twice means same maker. A one-off deployer stays grey: one token
+// is not a pattern, and pretending otherwise is just noise.
+//
+// Colours are hashed from the address, so a given deployer keeps its colour permanently and across
+// devices with nothing stored. The palette deliberately skips red and green — those already mean
+// down and up two columns over, and a green chip would read as "up" to anyone glancing.
+const ORIGIN_HUES = [34,44,54,64,74,84,168,182,196,208,220,232,244,256,268,280,292,304,316,328,158,190,214,286];
+function originStyle(addr){
+  let n = 0;
+  for (let i = 2; i < addr.length; i++) n = (n * 31 + addr.charCodeAt(i)) >>> 0;
+  const hue = ORIGIN_HUES[n % ORIGIN_HUES.length];
+  const dark = (n >>> 8) % 2;                       // two lightness steps, so 48 distinct swatches
+  const night = document.body.classList.contains('night');
+  const l = night ? (dark ? 34 : 46) : (dark ? 38 : 50);
+  return `background:hsl(${hue} 62% ${l}%)`;
+}
+const padLogo = (p, row)=>{
   const src = PADIMG[p];
   if (src) return `<span class="pad" title="${esc(p)}"><img src="${src}" alt=""></span>`;
+  if (row && row.origin && row.originN > 1){
+    const n = row.originN > 99 ? '99+' : String(row.originN);
+    const t = `${row.originN} tokens from ${row.origin}`;
+    return `<span class="pad unk org" style="${originStyle(row.origin)}" title="${esc(t)}">${n}</span>`;
+  }
   return `<span class="pad unk" title="${esc(p||'unknown launchpad')}">?</span>`;
 };
 
@@ -396,6 +421,7 @@ function derive(l){
   l._c1  = ps.priceChange1hPct ?? null;
   l._c24 = ps.priceChange24hPct ?? null;
   l._c6  = ps.priceChange6hPct ?? null;
+  l.origin = r.origin ?? null; l.originN = r.originN ?? null;
   return l;
 }
 function fromAuction(a){
@@ -525,7 +551,7 @@ function render(){
     const xh = xOf(l.xUrl);
     const fb = `<span class=em style=&quot;background:hsl(${(l.imageHue??200)},65%,85%)&quot;>${esc((l.tokenSymbol||'?').slice(0,2))}</span>`.replace(/&quot;/g,'\'');
     const img = l.imageUrl && /^https:/.test(l.imageUrl) ? `<img src="${esc(l.imageUrl)}" loading="lazy" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">` : fb;
-    return `<td><div class=tk>${img}<div><div class=sym>${padLogo(l.launchpad)}${esc((l.tokenSymbol||'').slice(0,24))}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
+    return `<td><div class=tk>${img}<div><div class=sym>${padLogo(l.launchpad, l)}${esc((l.tokenSymbol||'').slice(0,24))}</div><div class=nm>${esc((l.tokenName||'').slice(0,40))} · ${ageStr(l.createdAt)}</div></div></div></td>
       <td data-l="mcap">${usd(l.fdvUsd)}</td>
       <td data-l="vol24">${usd(l._vol)}</td>
       <td data-l="24h">${pct(l._c24)}</td>

@@ -21,10 +21,11 @@ import { cachedTags, resolveTags, rawFactories } from '../lib/tagger.js';
 import { enrich as dexEnrich } from '../lib/dex.js';
 import { cachedHolders, cachedIcons, resolveHolders } from '../lib/holders.js';
 import { cachedDevs } from '../lib/devs.js';
+import { cachedOrigins } from '../lib/origins.js';
 
 // Single source of truth for the payload shape. FILLABLE = everything except identity fields
 // (which must never be overwritten) and derived ones (resolved later in the pipeline).
-const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website',
+const KEEP = ['ca','sym','name','launchpad','alsoOn','creator','creatorEns','x','telegram','website','origin','originN',
               'mcapUsd','volUsd','liqUsd','change24h','change1h','change6h','holders','buyers1h','createdAt',
               'status','imageUrl','imageEmoji','imageHue','description','graduationPct','xVerified'];
 const NEVER_FILL = new Set(['ca','sym','alsoOn','creatorEns']);
@@ -325,6 +326,32 @@ export default async function handler(req, res) {
   // (stage 2), so issuer- and pad-based rules had nothing to match on: five RWA rows and one
   // dontblink row walked straight through. Re-apply now that identity is actually known.
   launches = launches.filter(l => !excluded(l));
+
+  // KNOWN UNKNOWNS. Rows with no launchpad all render as the same grey "?", which hides the fact
+  // that they are not all strangers: most no-pad tokens on this chain come from a handful of repeat
+  // deployers. Attach the deploying contract, count how many rows share it, and publish only the
+  // ones that repeat — a deployer with a single token stays anonymous, because one token is not a
+  // pattern. Cache-only read; the indexer fills it a batch at a time.
+  try {
+    const orphan = launches.filter(l => !l.launchpad || l.launchpad === 'other');
+    if (orphan.length) {
+      const origins = await cachedOrigins(orphan.map(l => l.ca));
+      const tally = new Map();
+      for (const l of orphan) {
+        const o = origins.get(l.ca.toLowerCase());
+        if (o) tally.set(o, (tally.get(o) || 0) + 1);
+      }
+      for (const l of orphan) {
+        const o = origins.get(l.ca.toLowerCase());
+        if (o && (tally.get(o) || 0) > 1) { l.origin = o; l.originN = tally.get(o); }
+      }
+      // worklist for the indexer, newest first so fresh arrivals get identified soonest
+      const unknown = orphan.filter(l => !origins.has(l.ca.toLowerCase()))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .map(l => l.ca).slice(0, 400);
+      if (unknown.length) await redis(['SET', 'need:origins', JSON.stringify(unknown)]);
+    }
+  } catch (e) { console.error('[feed] origin clustering failed:', e); }
 
   const byPad = {};
   for (const l of launches) byPad[l.launchpad || 'unknown'] = (byPad[l.launchpad || 'unknown'] || 0) + 1;
