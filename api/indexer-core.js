@@ -36,6 +36,64 @@ function decodeParams(ev) {
 }
 
 // read one factory's logs, newest first, until we pass `stopBlock` (last-seen) or hit maxPages
+// TRANSACTION WALK — for factories that emit nothing.
+//
+// readFactory() reads event logs, which is right for pons, letscash and the rest. But a growing
+// number of deployers on this chain declare no events at all: Stonk Launcher's
+// CollectionTokenDeployer has one external function (`deploy`) and emits nothing, and bankr's
+// Doppler factory and lemon's TokenDeployer are the same. Log-walking sees zero, so those pads
+// stayed invisible until somebody found a private API.
+//
+// The tokens are still recoverable: list the transactions sent TO the factory, then read each one's
+// internal transactions for the contract-creation entry. That also hands over the dev wallet for
+// free — it's the tx sender — which the log route often has to guess at.
+//
+// Costs one extra request per launch, so it's opt-in per factory via `mode: 'tx'` and bounded by
+// the same page budget as the log walk.
+const readAny = (addr, cfg, stopBlock, maxPages, startParams = null) =>
+  (cfg.mode === 'tx' ? readFactoryTxs : readFactory)(addr, cfg, stopBlock, maxPages, startParams);
+
+async function readFactoryTxs(factoryAddr, cfg, stopBlock, maxPages, startParams = null) {
+  const tokens = [];
+  let params = startParams, pages = 0, newestBlock = stopBlock;
+  do {
+    const q = params
+      ? `?block_number=${params.block_number}&index=${params.index}&items_count=${params.items_count}`
+      : '';
+    let d;
+    try { d = await bs(`/addresses/${factoryAddr}/transactions${q}${q ? '&' : '?'}filter=to`); } catch { break; }
+    const items = d.items || [];
+    let caughtUp = false;
+    for (const t of items) {
+      const blk = t.block_number || t.block || 0;
+      if (blk > newestBlock) newestBlock = blk;
+      if (stopBlock && blk <= stopBlock) { caughtUp = true; break; }
+      if (t.status && t.status !== 'ok') continue;
+      let itx;
+      try { itx = await bs(`/transactions/${t.hash}/internal-transactions`); } catch { continue; }
+      for (const x of (itx.items || [])) {
+        if (!String(x.type || '').toLowerCase().includes('create')) continue;
+        const ca = String((x.created_contract || {}).hash || '').toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(ca)) continue;
+        if (tokens.some(k => k.ca === ca)) continue;
+        tokens.push({
+          ca,
+          launchpad: cfg.launchpad,
+          deployer: String((t.from || {}).hash || '').toLowerCase() || null,   // the caller is the dev
+          pool: null,
+          pairToken: null,
+          block: blk,
+          ts: t.timestamp ? new Date(t.timestamp).getTime() : null,
+        });
+      }
+    }
+    params = caughtUp ? null : d.next_page_params;
+    pages++;
+    if (caughtUp) break;
+  } while (params && pages < maxPages);
+  return { tokens, newestBlock, nextParams: params };
+}
+
 async function readFactory(factoryAddr, cfg, stopBlock, maxPages, startParams = null) {
   const tokens = [];
   let params = startParams, pages = 0, newestBlock = stopBlock;
@@ -110,7 +168,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     const last = lastRaw ? parseInt(lastRaw, 10) : 0;
     const pages = last ? livePages : backfillPages; // first run backfills deeper
     let res;
-    try { res = await readFactory(addr, cfg, last, pages); } catch { summary[cfg.launchpad] = 'err'; continue; }
+    try { res = await readAny(addr, cfg, last, pages); } catch { summary[cfg.launchpad] = 'err'; continue; }
     // write tokens into the index hash (idx:tokens), keyed by CA
     if (res.tokens.length) {
       // fill on-chain identity for the newest tokens (bounded so cron stays fast)
@@ -149,7 +207,7 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
       else startParams = res.nextParams || null;      // seed from where the live leg stopped
       if (startParams) {
         let b;
-        try { b = await readFactory(addr, cfg, 0, 4, startParams); } catch { b = null; }
+        try { b = await readAny(addr, cfg, 0, 4, startParams); } catch { b = null; }
         if (b) {
           if (b.tokens.length) {
             const ex = await redis(['HMGET', 'idx:tokens', ...b.tokens.map(t => t.ca)]);
