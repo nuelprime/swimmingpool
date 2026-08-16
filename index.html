@@ -136,7 +136,7 @@ tbody tr:last-child td{border-bottom:none}
 .tk .sym{font-family:var(--disp);font-size:14px;letter-spacing:.02em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .pad{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
 .pad img{width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge);background:var(--card)}
-.pad.unk.org{font-size:0}
+.pad.unk.org{color:rgba(255,255,255,.85)}
 .pad.unk{width:16px;height:16px;border-radius:50%;background:var(--faint);color:#fff;font-size:9px;font-weight:700;
   box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--edge)}
 .tk .nm{color:var(--faint);font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -378,7 +378,9 @@ const DEXICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/
 // Colours are hashed from the address, so a given deployer keeps its colour permanently and across
 // devices with nothing stored. The palette deliberately skips red and green — those already mean
 // down and up two columns over, and a green chip would read as "up" to anyone glancing.
-const ORIGIN_HUES = [34,44,54,64,74,84,168,182,196,208,220,232,244,256,268,280,292,304,316,328,158,190,214,286];
+// Skips red AND green: 24H already speaks in both, and a green chip reads as "up" to anyone
+// glancing. 158/168 were still green enough to fail that test, so the cool half starts at 178.
+const ORIGIN_HUES = [34,44,54,64,74,84,178,188,196,206,214,222,232,242,252,262,272,284,296,308,318,328,338,200];
 function originStyle(addr){
   let n = 0;
   for (let i = 2; i < addr.length; i++) n = (n * 31 + addr.charCodeAt(i)) >>> 0;
@@ -396,7 +398,7 @@ const padLogo = (p, row)=>{
     // number in the table. Same circle as a real pad badge, just coloured. The count lives in the
     // drawer, where there's room to say what it means.
     const t = `${row.originN} tokens from ${row.origin}`;
-    return `<span class="pad unk org" style="${originStyle(row.origin)}" title="${esc(t)}"></span>`;
+    return `<span class="pad unk org" style="${originStyle(row.origin)}" title="${esc(t)}">?</span>`;
   }
   return `<span class="pad unk" title="${esc(p||'unknown launchpad')}">?</span>`;
 };
