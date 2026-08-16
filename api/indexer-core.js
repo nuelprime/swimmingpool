@@ -148,6 +148,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
   const timeLeft = () => DEADLINE_MS - (Date.now() - startedAt);
   const room = (ms) => timeLeft() > ms;
 
+  const summary = {};
+
   // TAIL WORKERS, ROTATED AND RUN FIRST. holders, devs and origins used to run after the symbol
   // sweep, and once the letscash backfill pushed the unnamed queue past 12,000 the sweep plus the
   // factory scans consumed the entire 45s budget — so all three were skipped every single tick and
@@ -183,8 +185,8 @@ export async function runIndexer({ backfillPages = 3, livePages = 2, only = null
     }
     summary._tail = worker;
     await redis(['SET', 'idx:tail', String((turn + 1) % 3)]);
-  } catch {}
-  const summary = {};
+  } catch (e) { summary._tailErr = String(e && e.message || e); }
+
   // rotate one factory per invocation so each run fits the serverless time budget.
   // retired pads keep their existing rows and their labels, but stop consuming scan budget —
   // with letscash and bankr now on their own APIs, that budget belongs to pools.fun.
